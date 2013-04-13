@@ -37,11 +37,7 @@ namespace Mono.CompilerServices.SymbolWriter
 		List<LocalVariableEntry> _locals;
 		List<CodeBlockEntry> _blocks;
 		List<ScopeVariable> _scope_vars;
-#if NET_2_1
-		System.Collections.Stack _block_stack;
-#else		
 		Stack<CodeBlockEntry> _block_stack;
-#endif
 		readonly List<LineNumberEntry> method_lines;
 
 		readonly ICompileUnit _comp_unit;
@@ -64,7 +60,7 @@ namespace Mono.CompilerServices.SymbolWriter
 		public void MarkSequencePoint (int offset, SourceFileEntry file, int line, int column, bool is_hidden)
 		{
 			int file_idx = file != null ? file.Index : 0;
-			var lne = new LineNumberEntry (file_idx, line, offset, is_hidden);
+			var lne = new LineNumberEntry (file_idx, line, column, offset, is_hidden);
 
 			if (method_lines.Count > 0) {
 				var prev = method_lines[method_lines.Count - 1];
@@ -90,11 +86,7 @@ namespace Mono.CompilerServices.SymbolWriter
 		public void StartBlock (CodeBlockEntry.Type type, int start_offset)
 		{
 			if (_block_stack == null) {
-#if NET_2_1
-				_block_stack = new System.Collections.Stack ();
-#else				
 				_block_stack = new Stack<CodeBlockEntry> ();
-#endif
 			}
 			
 			if (_blocks == null)
@@ -185,7 +177,7 @@ namespace Mono.CompilerServices.SymbolWriter
 		{
 			MethodEntry entry = new MethodEntry (
 				file, _comp_unit.Entry, token, ScopeVariables,
-				Locals, method_lines.ToArray (), Blocks, null, 0, ns_id);
+				Locals, method_lines.ToArray (), Blocks, null, MethodEntry.Flags.ColumnsInfoIncluded, ns_id);
 
 			file.AddMethod (entry);
 		}

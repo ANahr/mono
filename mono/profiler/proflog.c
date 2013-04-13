@@ -13,6 +13,7 @@
 #include <mono/metadata/threads.h>
 #include <mono/metadata/mono-gc.h>
 #include <mono/metadata/debug-helpers.h>
+#include <mono/utils/atomic.h>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
@@ -65,6 +66,8 @@
 
 /* the architecture needs a memory fence */
 #if defined(__linux__) && (defined(__i386__) || defined(__x86_64__))
+#include <unistd.h>
+#include <sys/syscall.h>
 #include "perf_event.h"
 #define USE_PERF_EVENTS 1
 static int read_perf_mmap (MonoProfiler* prof);
@@ -1137,7 +1140,7 @@ thread_name (MonoProfiler *prof, uintptr_t tid, const char *name)
 }
 
 #ifndef HOST_WIN32
-#include "mono/io-layer/atomic.h"
+#include "mono/utils/atomic.h"
 #endif
 #define cmp_exchange InterlockedCompareExchangePointer
 /*#else

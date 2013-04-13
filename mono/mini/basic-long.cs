@@ -25,8 +25,8 @@ using System.Reflection;
 
 class Tests {
 
-	public static int Main () {
-		return TestDriver.RunTests (typeof (Tests));
+	public static int Main (string[] args) {
+		return TestDriver.RunTests (typeof (Tests), args);
 	}
 
 	public static int test_10_simple_cast () {
@@ -1189,6 +1189,12 @@ class Tests {
 			value = (ushort)value;
 		    return (value == 65526) ? 0 : 1;
 		}
+	}
+
+	public static int test_0_lneg_regress_10320 () {
+		long a = 0x100000000;
+		ulong c = ((ulong) (-(-a))) >> 32;
+		return c == 1 ? 0 : 1;
 	}
 }
 

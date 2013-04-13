@@ -6,7 +6,6 @@
 //
 // (c) Copyright 2006 Novell, Inc. (http://www.novell.com)
 //
-#if NET_2_0
 
 using System;
 using System.IO;
@@ -174,6 +173,7 @@ namespace System.Net
 			}
 		}
 
+#if !NET_2_1
 		[MonoTODO]
 		public static new RequestCachePolicy DefaultCachePolicy
 		{
@@ -184,6 +184,7 @@ namespace System.Net
 				throw GetMustImplement ();
 			}
 		}
+#endif
 
 		public bool EnableSsl {
 			get {
@@ -1194,5 +1195,4 @@ namespace System.Net
 	}
 }
 
-#endif
 

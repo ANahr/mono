@@ -3165,14 +3165,14 @@ do_invoke_method (VerifyContext *ctx, int method_token, gboolean virtual)
 		ILStackDesc copy;
 
 		if (mono_method_is_constructor (method) && !method->klass->valuetype) {
-			if (!mono_method_is_constructor (ctx->method))
+			if (IS_STRICT_MODE (ctx) && !mono_method_is_constructor (ctx->method))
 				CODE_NOT_VERIFIABLE (ctx, g_strdup_printf ("Cannot call a constructor outside one at 0x%04x", ctx->ip_offset));
-			if (method->klass != ctx->method->klass->parent && method->klass != ctx->method->klass)
+			if (IS_STRICT_MODE (ctx) && method->klass != ctx->method->klass->parent && method->klass != ctx->method->klass)
 				CODE_NOT_VERIFIABLE (ctx, g_strdup_printf ("Cannot call a constructor of a type different from this or super at 0x%04x", ctx->ip_offset));
 
 			ctx->super_ctor_called = TRUE;
 			value = stack_pop_safe (ctx);
-			if ((value->stype & THIS_POINTER_MASK) != THIS_POINTER_MASK)
+			if (IS_STRICT_MODE (ctx) && (value->stype & THIS_POINTER_MASK) != THIS_POINTER_MASK)
 				CODE_NOT_VERIFIABLE (ctx, g_strdup_printf ("Invalid 'this ptr' argument for constructor at 0x%04x", ctx->ip_offset));
 		} else {
 			value = stack_pop (ctx);
@@ -6004,7 +6004,7 @@ gboolean
 mono_verifier_is_class_full_trust (MonoClass *klass)
 {
 	/* under CoreCLR code is trusted if it is part of the "platform" otherwise all code inside the GAC is trusted */
-	gboolean trusted_location = (mono_security_get_mode () != MONO_SECURITY_MODE_CORE_CLR) ? 
+	gboolean trusted_location = !mono_security_core_clr_enabled () ?
 		(klass->image->assembly && klass->image->assembly->in_gac) : mono_security_core_clr_is_platform_image (klass->image);
 
 	if (verify_all && verifier_mode == MONO_VERIFIER_MODE_OFF)

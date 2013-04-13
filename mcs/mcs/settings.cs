@@ -159,6 +159,8 @@ namespace Mono.CSharp {
 
 		public RuntimeVersion StdLibRuntimeVersion;
 
+		public bool WriteMetadataOnly;
+
 		readonly List<string> conditional_symbols;
 
 		readonly List<SourceFile> source_files;
@@ -180,10 +182,8 @@ namespace Mono.CSharp {
 			StdLibRuntimeVersion = RuntimeVersion.v4;
 			WarningLevel = 4;
 
-			if (Environment.OSVersion.Platform == PlatformID.Win32NT)
-				TabSize = 4;
-			else
-				TabSize = 8;
+			// Default to 1 or mdb files would be platform speficic
+			TabSize = 1;
 
 			AssemblyReferences = new List<string> ();
 			AssemblyReferencesAliases = new List<Tuple<string, string>> ();
@@ -600,24 +600,7 @@ namespace Mono.CSharp {
 
 		static bool IsExternAliasValid (string identifier)
 		{
-			if (identifier.Length == 0)
-				return false;
-			if (identifier[0] != '_' && !char.IsLetter (identifier[0]))
-				return false;
-
-			for (int i = 1; i < identifier.Length; i++) {
-				char c = identifier[i];
-				if (char.IsLetter (c) || char.IsDigit (c))
-					continue;
-
-				UnicodeCategory category = char.GetUnicodeCategory (c);
-				if (category != UnicodeCategory.Format || category != UnicodeCategory.NonSpacingMark ||
-						category != UnicodeCategory.SpacingCombiningMark ||
-						category != UnicodeCategory.ConnectorPunctuation)
-					return false;
-			}
-
-			return true;
+			return Tokenizer.IsValidIdentifier (identifier);
 		}
 
 		static string[] LoadArgs (string file)
@@ -670,8 +653,9 @@ namespace Mono.CSharp {
 		{
 			output.WriteLine (
 				"Other flags in the compiler\n" +
-				"   --fatal[=COUNT]    Makes errors after COUNT fatal\n" +
+				"   --fatal[=COUNT]    Makes error after COUNT fatal\n" +
 				"   --lint             Enhanced warnings\n" +
+				"   --metadata-only    Produced assembly will contain metadata only\n" +
 				"   --parse            Only parses the source file\n" +
 				"   --runtime:VERSION  Sets mscorlib.dll metadata version: v1, v2, v4\n" +
 				"   --stacktrace       Shows stack trace at error location\n" +
@@ -933,7 +917,7 @@ namespace Mono.CSharp {
 				return ParseResult.Success;
 
 			case "/debug":
-				if (value == "full" || value == "pdbonly" || idx < 0) {
+				if (value.Equals ("full", StringComparison.OrdinalIgnoreCase) || value.Equals ("pdbonly", StringComparison.OrdinalIgnoreCase) || idx < 0) {
 					settings.GenerateDebugInfo = true;
 					return ParseResult.Success;
 				}
@@ -1423,6 +1407,10 @@ namespace Mono.CSharp {
 			case "--noconfig":
 				report.Warning (-29, 1, "Compatibility: Use -noconfig option instead of --noconfig");
 				settings.LoadDefaultReferences = false;
+				return ParseResult.Success;
+
+			case "--metadata-only":
+				settings.WriteMetadataOnly = true;
 				return ParseResult.Success;
 
 			default:

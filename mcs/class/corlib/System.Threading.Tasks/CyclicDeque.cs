@@ -24,7 +24,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#if NET_4_0 || MOBILE
+#if NET_4_0
 
 using System;
 using System.Collections.Generic;
@@ -93,6 +93,22 @@ namespace System.Threading.Tasks
 			
 			return PopResult.Succeed;
 		}
+
+		public bool PeekBottom (out T obj)
+		{
+			obj = default (T);
+
+			long b = Interlocked.Decrement (ref bottom);
+			var a = array;
+			long t = Interlocked.Read (ref top);
+			long size = b - t;
+
+			if (size < 0)
+				return false;
+
+			obj = a.segment[b % a.size];
+			return true;
+		}
 		
 		public PopResult PopTop (out T obj)
 		{
@@ -112,11 +128,35 @@ namespace System.Threading.Tasks
 			
 			return PopResult.Succeed;
 		}
+
+		internal bool PeekTop (out T obj)
+		{
+			obj = default (T);
+
+			long t = Interlocked.Read (ref top);
+			long b = Interlocked.Read (ref bottom);
+
+			if (b - t <= 0)
+				return false;
+
+			var a = array;
+			obj = a.segment[t % a.size];
+
+			return true;
+		}
 		
 		public IEnumerable<T> GetEnumerable ()
 		{
 			var a = array;
 			return a.GetEnumerable (bottom, ref top);
+		}
+
+		public bool IsEmpty {
+			get {
+				long t = Interlocked.Read (ref top);
+				long b = Interlocked.Read (ref bottom);
+				return b - t <= 0;
+			}
 		}
 	}
 	

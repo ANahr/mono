@@ -79,7 +79,7 @@ namespace Mono.CSharp
 			module = new ModuleContainer (ctx);
 			module.Evaluator = this;
 
-			source_file = new CompilationSourceFile (module);
+			source_file = new CompilationSourceFile (module, null);
 			module.AddTypeContainer (source_file);
 
 			startup_files = ctx.SourceFiles.Count;
@@ -116,9 +116,10 @@ namespace Mono.CSharp
 
 			Location.Initialize (ctx.SourceFiles);
 
+			var parser_session = new ParserSession ();
 			for (int i = 0; i < startup_files; ++i) {
 				var sf = ctx.SourceFiles [i];
-				d.Parse (sf, module);
+				d.Parse (sf, module, parser_session, ctx.Report);
 			}
 		}
 
@@ -225,9 +226,16 @@ namespace Mono.CSharp
 
 				bool partial_input;
 				CSharpParser parser = ParseString (ParseMode.Silent, input, out partial_input);
+
+				// Terse mode, try to provide the trailing semicolon automatically.
 				if (parser == null && Terse && partial_input){
 					bool ignore;
-					parser = ParseString (ParseMode.Silent, input + ";", out ignore);
+
+					// check if the source would compile with a block, if so, we should not
+					// add the semicolon.
+					var needs_block = ParseString (ParseMode.Silent, input + "{}", out ignore) != null;
+					if (!needs_block)
+						parser = ParseString (ParseMode.Silent, input + ";", out ignore);
 				}
 				if (parser == null){
 					compiled = null;
@@ -445,8 +453,11 @@ namespace Mono.CSharp
 		//
 		InputKind ToplevelOrStatement (SeekableStreamReader seekable)
 		{
-			Tokenizer tokenizer = new Tokenizer (seekable, source_file);
+			Tokenizer tokenizer = new Tokenizer (seekable, source_file, new ParserSession ());
 			
+			// Prefer contextual block keywords over identifiers
+			tokenizer.parsing_block++;
+
 			int t = tokenizer.token ();
 			switch (t){
 			case Token.EOF:
@@ -574,10 +585,11 @@ namespace Mono.CSharp
 			seekable.Position = 0;
 
 			source_file.DeclarationFound = false;
-			CSharpParser parser = new CSharpParser (seekable, source_file);
+			CSharpParser parser = new CSharpParser (seekable, source_file, new ParserSession ());
 
 			if (kind == InputKind.StatementOrExpression){
 				parser.Lexer.putback_char = Tokenizer.EvalStatementParserCharacter;
+				parser.Lexer.parsing_block++;
 				ctx.Settings.StatementMode = true;
 			} else {
 				parser.Lexer.putback_char = Tokenizer.EvalCompilationUnitParserCharacter;
@@ -655,7 +667,11 @@ namespace Mono.CSharp
 			}
 
 			module.CreateContainer ();
-			source_file.EnableUsingClausesRedefinition ();
+
+			// Disable module and source file re-definition checks
+			module.EnableRedefinition ();
+			source_file.EnableRedefinition ();
+
 			module.Define ();
 
 			if (Report.Errors != 0){
@@ -666,6 +682,7 @@ namespace Mono.CSharp
 			}
 
 			if (host != null){
+				host.PrepareEmit ();
 				host.EmitContainer ();
 			}
 			
@@ -979,7 +996,9 @@ namespace Mono.CSharp
 		static public string help {
 			get {
 				return "Static methods:\n" +
+#if !NET_2_1
 					"  Describe (object);       - Describes the object's type\n" +
+#endif
 					"  LoadPackage (package);   - Loads the given Package (like -pkg:FILE)\n" +
 					"  LoadAssembly (assembly); - Loads the given assembly (like -r:ASSEMBLY)\n" +
 					"  ShowVars ();             - Shows defined local variables.\n" +

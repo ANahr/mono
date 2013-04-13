@@ -15,6 +15,9 @@ using NUnit.Framework;
 
 #pragma warning disable 0219
 
+namespace MonoTests
+{
+
 [TestFixture]
 public class DebuggerTests
 {
@@ -94,7 +97,8 @@ public class DebuggerTests
 		// String
 		MethodMirror m = entry_point.DeclaringType.GetMethod (name);
 		Assert.IsNotNull (m);
-		vm.SetBreakpoint (m, 0);
+		//Console.WriteLine ("X: " + name + " " + m.ILOffsets.Count + " " + m.Locations.Count);
+		vm.SetBreakpoint (m, m.ILOffsets [0]);
 
 		Event e = null;
 
@@ -192,7 +196,7 @@ public class DebuggerTests
 		// Argument checking
 		AssertThrows<ArgumentException> (delegate {
 				// Invalid IL offset
-				vm.SetBreakpoint (m, 1);
+				vm.SetBreakpoint (m, 2);
 			});
 	}
 
@@ -344,6 +348,11 @@ public class DebuggerTests
 		Assert.AreEqual (m2.Name, (e as BreakpointEvent).Method.Name);
 	}
 
+	void assert_location (Event e, string method) {
+		Assert.IsTrue (e is StepEvent);
+		Assert.AreEqual (method, (e as StepEvent).Method.Name);
+	}
+
 	[Test]
 	public void SingleStepping () {
 		Event e = run_until ("single_stepping");
@@ -354,22 +363,22 @@ public class DebuggerTests
 		step_req = req;
 
 		// Step over 'bool b = true'
-		vm.Resume ();
-		e = GetNextEvent ();
-		Assert.IsTrue (e is StepEvent);
-		Assert.AreEqual ("single_stepping", (e as StepEvent).Method.Name);
+		e = step_once ();
+		assert_location (e, "single_stepping");
+
+		// Skip nop
+		step_once ();
 
 		// Step into ss1
-		vm.Resume ();
-		e = GetNextEvent ();
-		Assert.IsTrue (e is StepEvent);
-		Assert.AreEqual ("ss1", (e as StepEvent).Method.Name);
+		e = step_once ();
+		assert_location (e, "ss1");
+
+		// Skip }
+		e = step_once ();
 
 		// Step out of ss1
-		vm.Resume ();
-		e = GetNextEvent ();
-		Assert.IsTrue (e is StepEvent);
-		Assert.AreEqual ("single_stepping", (e as StepEvent).Method.Name);
+		e = step_once ();
+		assert_location (e, "single_stepping");
 
 		// Change to step over
 		req.Disable ();
@@ -377,10 +386,8 @@ public class DebuggerTests
 		req.Enable ();
 
 		// Step over ss2
-		vm.Resume ();
-		e = GetNextEvent ();
-		Assert.IsTrue (e is StepEvent);
-		Assert.AreEqual ("single_stepping", (e as StepEvent).Method.Name);
+		e = step_once ();
+		assert_location (e, "single_stepping");
 
 		// Change to step into
 		req.Disable ();
@@ -388,10 +395,8 @@ public class DebuggerTests
 		req.Enable ();
 
 		// Step into ss3
-		vm.Resume ();
-		e = GetNextEvent ();
-		Assert.IsTrue (e is StepEvent);
-		Assert.AreEqual ("ss3", (e as StepEvent).Method.Name);
+		e = step_once ();
+		assert_location (e, "ss3");
 
 		// Change to step out
 		req.Disable ();
@@ -399,10 +404,8 @@ public class DebuggerTests
 		req.Enable ();
 
 		// Step back into single_stepping
-		vm.Resume ();
-		e = GetNextEvent ();
-		Assert.IsTrue (e is StepEvent);
-		Assert.AreEqual ("single_stepping", (e as StepEvent).Method.Name);
+		e = step_once ();
+		assert_location (e, "single_stepping");
 
 		// Change to step into
 		req.Disable ();
@@ -410,10 +413,8 @@ public class DebuggerTests
 		req.Enable ();
 
 		// Step into ss3_2 ()
-		vm.Resume ();
-		e = GetNextEvent ();
-		Assert.IsTrue (e is StepEvent);
-		Assert.AreEqual ("ss3_2", (e as StepEvent).Method.Name);
+		e = step_once ();
+		assert_location (e, "ss3_2");
 
 		// Change to step over
 		req.Disable ();
@@ -421,20 +422,19 @@ public class DebuggerTests
 		req.Enable ();
 
 		// Step over ss3_2_2 ()
-		vm.Resume ();
-		e = GetNextEvent ();
-		Assert.IsTrue (e is StepEvent);
-		Assert.AreEqual ("ss3_2", (e as StepEvent).Method.Name);
+		e = step_once ();
+		assert_location (e, "ss3_2");
 
 		// Recreate the request
 		req.Disable ();
 		req.Enable ();
 
+		// Skip }
+		e = step_once ();
+
 		// Step back into single_stepping () with the new request
-		vm.Resume ();
-		e = GetNextEvent ();
-		Assert.IsTrue (e is StepEvent);
-		Assert.AreEqual ("single_stepping", (e as StepEvent).Method.Name);
+		e = step_once ();
+		assert_location (e, "single_stepping");
 
 		// Change to step into
 		req.Disable ();
@@ -442,10 +442,11 @@ public class DebuggerTests
 		req.Enable ();
 
 		// Step into ss4 ()
-		vm.Resume ();
-		e = GetNextEvent ();
-		Assert.IsTrue (e is StepEvent);
-		Assert.AreEqual ("ss4", (e as StepEvent).Method.Name);
+		e = step_once ();
+		assert_location (e, "ss4");
+
+		// Skip nop
+		e = step_once ();
 
 		// Change to StepSize.Line
 		req.Disable ();
@@ -454,19 +455,15 @@ public class DebuggerTests
 		req.Enable ();
 
 		// Step over ss1 (); ss1 ();
-		vm.Resume ();
-		e = GetNextEvent ();
-		Assert.IsTrue (e is StepEvent);
+		e = step_once ();
 
 		// Step into ss2 ()
 		req.Disable ();
 		req.Depth = StepDepth.Into;
 		req.Enable ();
 
-		vm.Resume ();
-		e = GetNextEvent ();
-		Assert.IsTrue (e is StepEvent);
-		Assert.AreEqual ("ss2", (e as StepEvent).Method.Name);
+		e = step_once ();
+		assert_location (e, "ss2");
 
 		req.Disable ();
 
@@ -477,11 +474,12 @@ public class DebuggerTests
 		req.AssemblyFilter = new AssemblyMirror [] { (e as BreakpointEvent).Method.DeclaringType.Assembly };
 		req.Enable ();
 
+		// Skip nop
+		e = step_once ();
+
 		// Step into is_even, skipping the linq stuff
-		vm.Resume ();
-		e = GetNextEvent ();
-		Assert.IsTrue (e is StepEvent);
-		Assert.AreEqual ("is_even", (e as StepEvent).Method.Name);
+		e = step_once ();
+		assert_location (e, "is_even");
 
 		// FIXME: Check that single stepping works with lock (obj)
 		
@@ -495,14 +493,24 @@ public class DebuggerTests
 		req.Enable ();
 
 		// Check that single stepping works in out-of-line bblocks
-		vm.Resume ();
-		e = GetNextEvent ();
-		Assert.IsTrue (e is StepEvent);
-		vm.Resume ();
-		e = GetNextEvent ();
-		Assert.IsTrue (e is StepEvent);
-		Assert.AreEqual ("ss6", (e as StepEvent).Method.Name);
+		e = step_once ();
+		e = step_once ();
+		assert_location (e, "ss6");
+		req.Disable ();
 
+		// Check that a step over stops at an EH clause
+		e = run_until ("ss7_2");
+		req = vm.CreateStepRequest (e.Thread);
+		req.Depth = StepDepth.Out;
+		req.Enable ();
+		e = step_once ();
+		assert_location (e, "ss7");
+		req.Disable ();
+		req = vm.CreateStepRequest (e.Thread);
+		req.Depth = StepDepth.Over;
+		req.Enable ();
+		e = step_once ();
+		assert_location (e, "ss7");
 		req.Disable ();
 	}
 
@@ -1083,7 +1091,7 @@ public class DebuggerTests
 		t = frame.Method.GetParameters ()[8].ParameterType;
 		Assert.AreEqual ("Tests2", t.Name);
 		var attrs = t.GetCustomAttributes (true);
-		Assert.AreEqual (2, attrs.Length);
+		Assert.AreEqual (3, attrs.Length);
 		foreach (var attr in attrs) {
 			if (attr.Constructor.DeclaringType.Name == "DebuggerDisplayAttribute") {
 				Assert.AreEqual (1, attr.ConstructorArguments.Count);
@@ -1098,10 +1106,18 @@ public class DebuggerTests
 				Assert.AreEqual (1, attr.ConstructorArguments.Count);
 				Assert.IsInstanceOfType (typeof (TypeMirror), attr.ConstructorArguments [0].Value);
 				Assert.AreEqual ("Tests", (attr.ConstructorArguments [0].Value as TypeMirror).Name);
+			} else if (attr.Constructor.DeclaringType.Name == "BAttribute") {
+				Assert.AreEqual (2, attr.NamedArguments.Count);
+				Assert.AreEqual ("afield", attr.NamedArguments [0].Field.Name);
+				Assert.AreEqual ("bfield", attr.NamedArguments [1].Field.Name);
 			} else {
 				Assert.Fail (attr.Constructor.DeclaringType.Name);
 			}
 		}
+
+		var assembly = entry_point.DeclaringType.Assembly;
+		var type = assembly.GetType ("Tests4");
+		Assert.IsFalse (type.IsInitialized);
 	}
 
 	[Test]
@@ -1332,6 +1348,9 @@ public class DebuggerTests
 		// this on vtype methods
 		e = run_until ("vtypes2");
 		
+		// Skip nop
+		e = single_step (e.Thread);
+
 		e = single_step (e.Thread);
 
 		frame = e.Thread.GetFrames () [0];
@@ -1347,6 +1366,9 @@ public class DebuggerTests
 
 		// this on static vtype methods
 		e = run_until ("vtypes3");
+
+		// Skip nop
+		e = single_step (e.Thread);
 
 		e = single_step (e.Thread);
 
@@ -1419,13 +1441,26 @@ public class DebuggerTests
 		}
 	}
 
+	Event step_once () {
+		vm.Resume ();
+		var e = GetNextEvent ();
+		Assert.IsTrue (e is StepEvent);
+		return e;
+	}
+
 	[Test]
 	public void Locals () {
 		var be = run_until ("locals1");
 
 		StackFrame frame = be.Thread.GetFrames () [0];
-
 		MethodMirror m1 = frame.Method;
+
+		// Compiler generated byref local
+		foreach (var l in m1.GetLocals ()) {
+			// The byval flag is hidden from the type
+			if (l.Name != "ri" && l.Type.Name == "Double")
+				AssertValue (null, frame.GetValue (l));
+		}
 
 		be = run_until ("locals2");
 
@@ -1434,19 +1469,19 @@ public class DebuggerTests
 		object val = frame.GetValue (frame.Method.GetLocal ("i"));
 		AssertValue (0, val);
 
-		// Execute i = 42
 		var req = vm.CreateStepRequest (be.Thread);
 		req.Enable ();
+		step_req = req;
 
-		vm.Resume ();
-		var e = GetNextEvent ();
-		Assert.IsTrue (e is StepEvent);
+		// Skip nop
+		step_once ();
+
+		// Execute i = 42
+		var e = step_once ();
 		Assert.AreEqual ("locals2", (e as StepEvent).Method.Name);
 
 		// Execute s = "AB";
-		vm.Resume ();
-		e = GetNextEvent ();
-		Assert.IsTrue (e is StepEvent);
+		e = step_once ();
 		Assert.AreEqual ("locals2", (e as StepEvent).Method.Name);
 
 		frame = e.Thread.GetFrames () [0];
@@ -1579,7 +1614,7 @@ public class DebuggerTests
 	public void Dispose () {
 		run_until ("Main");
 
-		vm.Dispose ();
+		vm.Detach ();
 
 		var e = GetNextEvent ();
 		Assert.IsInstanceOfType (typeof (VMDisconnectEvent), e);
@@ -1600,7 +1635,32 @@ public class DebuggerTests
 	}
 
 	[Test]
-	[Category("only88")]
+	public void ColumnNumbers () {
+		Event e = run_until ("line_numbers");
+
+		// FIXME: Merge this with LineNumbers () when its fixed
+
+		step_req = vm.CreateStepRequest (e.Thread);
+		step_req.Depth = StepDepth.Into;
+		step_req.Enable ();
+
+		Location l;
+		
+		vm.Resume ();
+
+		e = GetNextEvent ();
+		Assert.IsTrue (e is StepEvent);
+
+		l = e.Thread.GetFrames ()[0].Location;
+
+		Assert.AreEqual (3, l.ColumnNumber);
+
+		step_req.Disable ();
+	}
+
+	[Test]
+	// Broken by mcs+runtime changes (#5438)
+	[Category("NotWorking")]
 	public void LineNumbers () {
 		Event e = run_until ("line_numbers");
 
@@ -1681,7 +1741,7 @@ public class DebuggerTests
 
 	[Test]
 	public void Suspend () {
-		vm.Dispose ();
+		vm.Detach ();
 
 		Start (new string [] { "dtest-app.exe", "suspend-test" });
 
@@ -1831,7 +1891,6 @@ public class DebuggerTests
 		//m = vm.RootDomain.Corlib.GetType ("System.Object").GetMethod ("ToString");
 		m = s.Type.GetMethod ("ToString");
 		v = s.InvokeMethod (e.Thread, m, null);
-		Console.WriteLine ("X: " + (v as StringMirror).Value);
 
 		// return nullable null
 		m = t.GetMethod ("invoke_return_nullable_null");
@@ -1845,7 +1904,6 @@ public class DebuggerTests
 		//m = vm.RootDomain.Corlib.GetType ("System.Object").GetMethod ("ToString");
 		m = s.Type.GetMethod ("ToString");
 		v = s.InvokeMethod (e.Thread, m, null);
-		Console.WriteLine ("X: " + (v as StringMirror).Value);
 
 		// pass primitive
 		m = t.GetMethod ("invoke_pass_primitive");
@@ -2062,7 +2120,7 @@ public class DebuggerTests
 
 	[Test]
 	public void InvokeSingleThreaded () {
-		vm.Dispose ();
+		vm.Detach ();
 
 		Start (new string [] { "dtest-app.exe", "invoke-single-threaded" });
 
@@ -2096,6 +2154,44 @@ public class DebuggerTests
 
 		e = GetNextEvent ();
 		Assert.AreEqual (EventType.TypeLoad, e.EventType);
+	}
+
+	List<Value> invoke_results;
+
+	[Test]
+	public void InvokeMultiple () {
+		Event e = run_until ("invoke1");
+
+		StackFrame frame = e.Thread.GetFrames () [0];
+
+		TypeMirror t = frame.Method.DeclaringType;
+		ObjectMirror this_obj = (ObjectMirror)frame.GetThis ();
+
+		TypeMirror t2 = frame.Method.GetParameters ()[0].ParameterType;
+
+		var methods = new MethodMirror [2];
+		methods [0] = t.GetMethod ("invoke_return_ref");
+		methods [1] = t.GetMethod ("invoke_return_primitive");
+
+		invoke_results = new List<Value> ();
+
+		var r = this_obj.BeginInvokeMultiple (e.Thread, methods, null, InvokeOptions.SingleThreaded, invoke_multiple_cb, this_obj);
+		WaitHandle.WaitAll (new WaitHandle[] { r.AsyncWaitHandle });
+		this_obj.EndInvokeMultiple (r);
+		// The callback might still be running
+		while (invoke_results.Count < 2) {
+			Thread.Sleep (100);
+		}
+		AssertValue ("ABC", invoke_results [0]);
+		AssertValue (42, invoke_results [1]);
+	}
+
+	void invoke_multiple_cb (IAsyncResult ar) {
+		ObjectMirror this_obj = (ObjectMirror)ar.AsyncState;
+
+		var res = this_obj.EndInvokeMethod (ar);
+		lock (invoke_results)
+			invoke_results.Add (res);
 	}
 
 	[Test]
@@ -2261,6 +2357,9 @@ public class DebuggerTests
 
 		step_req = req;
 
+		// Skip nop
+		step_once ();
+
 		// Step into invoke2
 		vm.Resume ();
 		e = GetNextEvent ();
@@ -2379,7 +2478,7 @@ public class DebuggerTests
 		Assert.AreEqual (0x0f, frames [1].Location.ILOffset);
 
 		Assert.AreEqual ("exception_filter_method", frames [2].Location.Method.Name);
-		Assert.AreEqual (0x05, frames [2].Location.ILOffset);
+		Assert.AreEqual (0x06, frames [2].Location.ILOffset);
 
 		Assert.AreEqual (0, frames [3].Location.Method.MetadataToken, 0);
 		Assert.AreEqual (0, frames [3].Location.ILOffset);
@@ -2389,7 +2488,7 @@ public class DebuggerTests
 
 	[Test]
 	public void ExceptionFilter2 () {
-		vm.Dispose ();
+		vm.Detach ();
 
 		Start (new string [] { "dtest-excfilter.exe" });
 
@@ -2489,7 +2588,7 @@ public class DebuggerTests
 
 	[Test]
 	public void Domains () {
-		vm.Dispose ();
+		vm.Detach ();
 
 		Start (new string [] { "dtest-app.exe", "domain-test" });
 
@@ -2503,6 +2602,17 @@ public class DebuggerTests
 		Assert.IsInstanceOfType (typeof (AppDomainCreateEvent), e);
 
 		var domain = (e as AppDomainCreateEvent).Domain;
+
+		// Check the object type
+		e = run_until ("domains_2");
+		var frame = e.Thread.GetFrames ()[0];
+		var o = frame.GetArgument (0) as ObjectMirror;
+		Assert.AreEqual ("CrossDomain", o.Type.Name);
+
+		// Do a remoting invoke
+		var cross_domain_type = o.Type;
+		var v = o.InvokeMethod (e.Thread, cross_domain_type.GetMethod ("invoke_3"), null);
+		AssertValue (42, v);
 
 		// Run until the callback in the domain
 		MethodMirror m = entry_point.DeclaringType.GetMethod ("invoke_in_domain");
@@ -2558,7 +2668,7 @@ public class DebuggerTests
 		Assert.AreEqual (domain, (e as AppDomainUnloadEvent).Domain);
 
 		// Run past the unload
-		e = run_until ("domains_2");
+		e = run_until ("domains_3");
 
 		// Test access to unloaded types
 		// FIXME: Add an exception type for this
@@ -2584,7 +2694,7 @@ public class DebuggerTests
 
 	[Test]
 	public void RefEmit () {
-		vm.Dispose ();
+		vm.Detach ();
 
 		Start (new string [] { "dtest-app.exe", "ref-emit-test" });
 
@@ -2620,7 +2730,7 @@ public class DebuggerTests
 	[Test]
 	public void StackTraceInNative () {
 		// Check that stack traces can be produced for threads in native code
-		vm.Dispose ();
+		vm.Detach ();
 
 		Start (new string [] { "dtest-app.exe", "frames-in-native" });
 
@@ -2651,10 +2761,16 @@ public class DebuggerTests
 		// Check that invokes are disabled for such threads
 		TypeMirror t = frames [frame_index + 1].Method.DeclaringType;
 
-		// return void
 		var m = t.GetMethod ("invoke_static_return_void");
 		AssertThrows<InvalidOperationException> (delegate {
 				t.InvokeMethod (e.Thread, m, null);
+			});
+
+		// Check that the frame info is invalidated
+		run_until ("frames_in_native_2");
+
+		AssertThrows<InvalidStackFrameException> (delegate {
+				Console.WriteLine (frames [frame_index].GetThis ());
 			});
 	}
 
@@ -2964,5 +3080,75 @@ public class DebuggerTests
 		args = gmd.GetGenericArguments ();
 		Assert.AreEqual (1, args.Length);
 		Assert.AreEqual ("T", args [0].Name);
+
+		var attrs = m.GetCustomAttributes (true);
+		Assert.AreEqual (1, attrs.Length);
+		Assert.AreEqual ("StateMachineAttribute", attrs [0].Constructor.DeclaringType.Name);
 	}
+
+	[Test]
+	public void UnhandledException () {
+		vm.Detach ();
+
+		Start (new string [] { "dtest-app.exe", "unhandled-exception" });
+
+		var req = vm.CreateExceptionRequest (null, false, true);
+		req.Enable ();
+
+		var e = run_until ("unhandled_exception");
+		vm.Resume ();
+
+		var e2 = GetNextEvent ();
+		Assert.IsTrue (e2 is ExceptionEvent);
+
+		vm.Exit (0);
+		vm = null;
+	}
+
+#if NET_4_5
+	[Test]
+	public void UnhandledExceptionUserCode () {
+		vm.Detach ();
+
+		// Exceptions caught in non-user code are treated as unhandled
+		Start (new string [] { "dtest-app.exe", "unhandled-exception-user" });
+
+		var req = vm.CreateExceptionRequest (null, false, true);
+		req.AssemblyFilter = new List<AssemblyMirror> () { entry_point.DeclaringType.Assembly };
+		req.Enable ();
+
+		var e = run_until ("unhandled_exception_user");
+		vm.Resume ();
+
+		var e2 = GetNextEvent ();
+		Assert.IsTrue (e2 is ExceptionEvent);
+
+		vm.Exit (0);
+		vm = null;
+	}
+#endif
+
+	[Test]
+	public void GCWhileSuspended () {
+		// Check that objects are kept alive during suspensions
+		Event e = run_until ("gc_suspend_1");
+
+		MethodMirror m = entry_point.DeclaringType.GetMethod ("gc_suspend_invoke");
+
+		var o = entry_point.DeclaringType.GetValue (entry_point.DeclaringType.GetField ("gc_suspend_field")) as ObjectMirror;
+		//Console.WriteLine (o);
+
+		StackFrame frame = e.Thread.GetFrames () [0];
+		TypeMirror t = frame.Method.DeclaringType;
+		for (int i = 0; i < 10; ++i)
+			t.InvokeMethod (e.Thread, m, new Value [] { });
+
+		// This throws an exception if the object is collected
+		long addr = o.Address;
+
+		var o2 = entry_point.DeclaringType.GetValue (entry_point.DeclaringType.GetField ("gc_suspend_field")) as ObjectMirror;
+		Assert.IsNull (o2);
+	}
+}
+
 }

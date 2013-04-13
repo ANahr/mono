@@ -22,8 +22,8 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
-#if !TARGET_JVM
 using Mono.Security.Authenticode;
+#if !MOBILE
 using Mono.Security.Protocol.Tls;
 #endif
 
@@ -149,7 +149,7 @@ namespace MonoTests.System.Net
 			}
 		}
 
-#if !TARGET_JVM //NotWorking
+#if !TARGET_JVM && !MOBILE
 		[Test]
 		[Ignore ("Fails on MS.NET")]
 		public void SslClientBlock ()
@@ -373,6 +373,7 @@ namespace MonoTests.System.Net
 		}
 
 		[Test] // bug #508027
+		[Category ("NotWorking")] // #5842
 		public void BeginGetResponse ()
 		{
 			IPEndPoint ep = new IPEndPoint (IPAddress.Loopback, 8001);
@@ -384,6 +385,7 @@ namespace MonoTests.System.Net
 				HttpWebRequest req;
 
 				req = (HttpWebRequest) WebRequest.Create (url);
+				req.Timeout = 5000;
 				req.Method = "POST";
 				req.SendChunked = false;
 				req.KeepAlive = false;
@@ -392,6 +394,7 @@ namespace MonoTests.System.Net
 				req.Abort ();
 
 				req = (HttpWebRequest) WebRequest.Create (url);
+				req.Timeout = 5000;
 				req.Method = "POST";
 				req.SendChunked = true;
 				req.KeepAlive = false;
@@ -401,6 +404,7 @@ namespace MonoTests.System.Net
 				req.Abort ();
 
 				req = (HttpWebRequest) WebRequest.Create (url);
+				req.Timeout = 5000;
 				req.Method = "POST";
 				req.ContentLength = 5;
 				req.SendChunked = false;
@@ -411,6 +415,7 @@ namespace MonoTests.System.Net
 				req.Abort ();
 
 				req = (HttpWebRequest) WebRequest.Create (url);
+				req.Timeout = 5000;
 				req.Method = "POST";
 				req.SendChunked = false;
 				req.KeepAlive = true;
@@ -420,6 +425,7 @@ namespace MonoTests.System.Net
 				req.Abort ();
 
 				req = (HttpWebRequest) WebRequest.Create (url);
+				req.Timeout = 5000;
 				req.Method = "POST";
 				req.SendChunked = false;
 				req.KeepAlive = false;
@@ -429,6 +435,7 @@ namespace MonoTests.System.Net
 				req.Abort ();
 
 				req = (HttpWebRequest) WebRequest.Create (url);
+				req.Timeout = 5000;
 				req.Method = "POST";
 				req.SendChunked = false;
 				req.KeepAlive = true;
@@ -438,6 +445,7 @@ namespace MonoTests.System.Net
 				req.Abort ();
 
 				req = (HttpWebRequest) WebRequest.Create (url);
+				req.Timeout = 5000;
 				req.Method = "GET";
 				req.SendChunked = true;
 
@@ -445,6 +453,7 @@ namespace MonoTests.System.Net
 				req.Abort ();
 
 				req = (HttpWebRequest) WebRequest.Create (url);
+				req.Timeout = 5000;
 				req.Method = "GET";
 				req.ContentLength = 5;
 
@@ -452,6 +461,7 @@ namespace MonoTests.System.Net
 				req.Abort ();
 
 				req = (HttpWebRequest) WebRequest.Create (url);
+				req.Timeout = 5000;
 				req.Method = "GET";
 				req.ContentLength = 0;
 
@@ -683,6 +693,7 @@ namespace MonoTests.System.Net
 		}
 
 		[Test] // bug #510661
+		[Category ("NotWorking")] // #5842
 		public void GetRequestStream_Close_NotAllBytesWritten ()
 		{
 			IPEndPoint ep = new IPEndPoint (IPAddress.Loopback, 10002);
@@ -750,6 +761,7 @@ namespace MonoTests.System.Net
 		}
 
 		[Test] // bug #510642
+		[Category ("NotWorking")] // #5842
 		public void GetRequestStream_Write_Overflow ()
 		{
 			IPEndPoint ep = new IPEndPoint (IPAddress.Loopback, 8010);
@@ -1942,9 +1954,9 @@ namespace MonoTests.System.Net
 			},
 			(c) =>
 			{
-				c.Request.InputStream.ReadAll (received, 0, received.Length);
-				c.Response.StatusCode = 204;
-				c.Response.Close();
+				//c.Request.InputStream.ReadAll (received, 0, received.Length);
+				//c.Response.StatusCode = 204;
+				//c.Response.Close();
 			});
 		}
 
@@ -1970,8 +1982,8 @@ namespace MonoTests.System.Net
 			(c) =>
 			{
 				c.Request.InputStream.ReadAll (received, 0, received.Length);
-				c.Response.StatusCode = 204;
-				c.Response.Close ();
+//				c.Response.StatusCode = 204;
+//				c.Response.Close ();
 			});
 		}
 
@@ -2096,7 +2108,7 @@ namespace MonoTests.System.Net
 				c.Response.ContentLength64 = data64KB.Length;
 				c.Response.OutputStream.Write (data64KB, 0, data64KB.Length / 2);
 				Thread.Sleep (1000);
-				c.Response.OutputStream.Write (data64KB, data64KB.Length / 2, data64KB.Length / 2);
+//				c.Response.OutputStream.Write (data64KB, data64KB.Length / 2, data64KB.Length / 2);
 				c.Response.OutputStream.Close ();
 				c.Response.Close ();
 			});
@@ -2177,11 +2189,13 @@ namespace MonoTests.System.Net
 			(c) =>
 			{
 				aborted.Set ();
-				Thread.Sleep (100);
-				c.Response.StatusCode = 200;
-				c.Response.ContentLength64 = 0;
-				c.Response.Close ();
+//				Thread.Sleep (100);
+//				c.Response.StatusCode = 200;
+//				c.Response.ContentLength64 = 0;
+//				c.Response.Close ();
 			});
+
+			return;
 		}
 
 		void DoRequest (Action<HttpWebRequest, EventWaitHandle> request)
@@ -2289,6 +2303,7 @@ namespace MonoTests.System.Net
 		}
 
 		[Test]
+		[Category ("NotWorking")] // #5490
 		public void InvalidNamesThatWork ()
 		{
 			HttpWebRequest req = (HttpWebRequest) WebRequest.Create ("http://go-mono.com");
@@ -2317,10 +2332,34 @@ namespace MonoTests.System.Net
 		[Test]
 		public void AddAndRemoveDate ()
 		{
-			HttpWebRequest req = (HttpWebRequest) WebRequest.Create ("http://go-mono.com");
-			req.Date = DateTime.UtcNow;
+			// Neil Armstrong set his foot on Moon
+			var landing = new DateTime (1969, 7, 21, 2, 56, 0, DateTimeKind.Utc);
+			Assert.AreEqual (621214377600000000, landing.Ticks);
+			var unspecified = new DateTime (1969, 7, 21, 2, 56, 0);
+			var local = landing.ToLocalTime ();
+
+			var req = (HttpWebRequest)WebRequest.Create ("http://www.mono-project.com/");
+			req.Date = landing;
+			Assert.AreEqual (DateTimeKind.Local, req.Date.Kind);
+			Assert.AreEqual (local.Ticks, req.Date.Ticks);
+			Assert.AreEqual (local, req.Date);
+
+			req.Date = unspecified;
+			Assert.AreEqual (DateTimeKind.Local, req.Date.Kind);
+			Assert.AreEqual (unspecified.Ticks, req.Date.Ticks);
+			Assert.AreEqual (unspecified, req.Date);
+
+			req.Date = local;
+			Assert.AreEqual (DateTimeKind.Local, req.Date.Kind);
+			Assert.AreEqual (local.Ticks, req.Date.Ticks);
+			Assert.AreEqual (local, req.Date);
+
 			req.Date = DateTime.MinValue;
-			Assert.AreEqual (DateTime.MinValue, req.Date);
+			Assert.AreEqual (DateTimeKind.Unspecified, DateTime.MinValue.Kind);
+			Assert.AreEqual (DateTimeKind.Unspecified, req.Date.Kind);
+			Assert.AreEqual (0, req.Date.Ticks);
+
+			Assert.AreEqual (null, req.Headers.Get ("Date"));
 		}
 #endif
 		class ListenerScope : IDisposable {
@@ -2372,7 +2411,7 @@ namespace MonoTests.System.Net
 			}
 		}
 
-#if !TARGET_JVM
+#if !TARGET_JVM && !MOBILE
 		class SslHttpServer : HttpServer {
 			X509Certificate _certificate;
 
@@ -2507,6 +2546,90 @@ namespace MonoTests.System.Net
 			};
 		}
 #endif
+
+		[Test]
+		public void CookieContainerTest ()
+		{
+			IPEndPoint ep = new IPEndPoint (IPAddress.Loopback, 11002);
+			string url = "http://" + ep.ToString ();
+
+			using (SocketResponder responder = new SocketResponder (ep, new SocketRequestHandler (CookieRequestHandler))) {
+				responder.Start ();
+
+				CookieContainer container = new CookieContainer ();
+				container.Add(new Uri (url), new Cookie ("foo", "bar"));
+				HttpWebRequest request = (HttpWebRequest) WebRequest.Create (url);
+				request.CookieContainer = container;
+				WebHeaderCollection headers = request.Headers;
+				headers.Add("Cookie", "foo=baz");
+				HttpWebResponse response = (HttpWebResponse) request.GetResponse ();
+				string responseString = null;
+				using (StreamReader reader = new StreamReader (response.GetResponseStream ())) {
+					responseString = reader.ReadToEnd ();
+				}
+				response.Close ();
+				Assert.AreEqual (1, response.Cookies.Count, "#01");
+				Assert.AreEqual ("foo=bar", response.Headers.Get("Set-Cookie"), "#02");
+			}
+
+			using (SocketResponder responder = new SocketResponder (ep, new SocketRequestHandler (CookieRequestHandler))) {
+				responder.Start ();
+
+				CookieContainer container = new CookieContainer ();
+				HttpWebRequest request = (HttpWebRequest) WebRequest.Create (url);
+				request.CookieContainer = container;
+				WebHeaderCollection headers = request.Headers;
+				headers.Add("Cookie", "foo=baz");
+				HttpWebResponse response = (HttpWebResponse) request.GetResponse ();
+				string responseString = null;
+				using (StreamReader reader = new StreamReader (response.GetResponseStream ())) {
+					responseString = reader.ReadToEnd ();
+				}
+				response.Close ();
+				Assert.AreEqual (0, response.Cookies.Count, "#03");
+				Assert.AreEqual ("", response.Headers.Get("Set-Cookie"), "#04");
+			}
+		}
+
+		internal static byte[] CookieRequestHandler (Socket socket)
+		{
+			MemoryStream ms = new MemoryStream ();
+			byte[] buffer = new byte[4096];
+			int bytesReceived = socket.Receive (buffer);
+			while (bytesReceived > 0) {
+				ms.Write(buffer, 0, bytesReceived);
+				// We don't check for Content-Length or anything else here, so we give the client a little time to write
+				// after sending the headers
+				Thread.Sleep(200);
+				if (socket.Available > 0) {
+					bytesReceived = socket.Receive (buffer);
+				} else {
+					bytesReceived = 0;
+				}
+			}
+			ms.Flush();
+			ms.Position = 0;
+			string cookies = string.Empty;
+			using (StreamReader sr = new StreamReader (ms, Encoding.UTF8)) {
+				string line;
+				while ((line = sr.ReadLine ()) != null) {
+					if (line.StartsWith ("Cookie:")) {
+						cookies = line.Substring ("cookie: ".Length);
+					}
+				}
+			}
+
+			StringWriter sw = new StringWriter ();
+			sw.WriteLine ("HTTP/1.1 200 OK");
+			sw.WriteLine ("Content-Type: text/xml");
+			sw.WriteLine ("Set-Cookie: " + cookies);
+			sw.WriteLine ("Content-Length: " + cookies.Length.ToString (CultureInfo.InvariantCulture));
+			sw.WriteLine ();
+			sw.Write (cookies);
+			sw.Flush ();
+
+			return Encoding.UTF8.GetBytes (sw.ToString ());
+		}
 	}
 
 	[TestFixture]
@@ -3037,6 +3160,21 @@ namespace MonoTests.System.Net
 				}
 			}
 		}
+
+#if NET_4_0
+		[Test]
+		// Bug6737
+		// This test is supposed to fail prior to .NET 4.0
+		public void Post_EmptyRequestStream ()
+		{
+			var wr = HttpWebRequest.Create ("http://google.com");
+			wr.Method = "POST";
+			wr.GetRequestStream ();
+			
+			var gr = wr.BeginGetResponse (delegate { }, null);
+			Assert.AreEqual (true, gr.AsyncWaitHandle.WaitOne (5000), "#1");
+		}
+#endif
 	}
 
 	static class StreamExtensions {

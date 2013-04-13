@@ -201,14 +201,14 @@ namespace Mono.CSharp
 			{
 				base.Define (parent);
 
-				Spec = new MethodSpec (MemberKind.Method, parent.PartialContainer.Definition, this, ReturnType, null, ParameterInfo, ModFlags);
+				Spec = new MethodSpec (MemberKind.Method, parent.PartialContainer.Definition, this, ReturnType, ParameterInfo, ModFlags);
 
 				method_data = new MethodData (method, ModFlags, flags, this);
 
 				if (!method_data.Define (parent.PartialContainer, method.GetFullName (MemberName)))
 					return null;
 
-				Spec.SetMetaInfo (method_data.MethodBuilder);
+				method_data.DefineMethodBuilder (parent.PartialContainer, ParameterInfo);
 
 				return method_data.MethodBuilder;
 			}
@@ -268,14 +268,14 @@ namespace Mono.CSharp
 				
 				base.Define (parent);
 
-				Spec = new MethodSpec (MemberKind.Method, parent.PartialContainer.Definition, this, ReturnType, null, ParameterInfo, ModFlags);
+				Spec = new MethodSpec (MemberKind.Method, parent.PartialContainer.Definition, this, ReturnType, ParameterInfo, ModFlags);
 
 				method_data = new MethodData (method, ModFlags, flags, this);
 
 				if (!method_data.Define (parent.PartialContainer, method.GetFullName (MemberName)))
 					return null;
 
-				Spec.SetMetaInfo (method_data.MethodBuilder);
+				method_data.DefineMethodBuilder (parent.PartialContainer, ParameterInfo);
 
 				return method_data.MethodBuilder;
 			}
@@ -362,8 +362,13 @@ namespace Mono.CSharp
 				CheckAbstractAndExtern (block != null);
 				CheckProtectedModifier ();
 
-				if (block != null && block.IsIterator)
-					Iterator.CreateIterator (this, Parent.PartialContainer, ModFlags);
+				if (block != null) {
+					if (block.IsIterator)
+						Iterator.CreateIterator (this, Parent.PartialContainer, ModFlags);
+
+					if (Compiler.Settings.WriteMetadataOnly)
+						block = null;
+				}
 
 				return null;
 			}
@@ -906,7 +911,7 @@ namespace Mono.CSharp
 
 			public override void Emit (TypeDefinition parent)
 			{
-				if ((method.ModFlags & (Modifiers.ABSTRACT | Modifiers.EXTERN)) == 0) {
+				if ((method.ModFlags & (Modifiers.ABSTRACT | Modifiers.EXTERN)) == 0 && !Compiler.Settings.WriteMetadataOnly) {
 					block = new ToplevelBlock (Compiler, ParameterInfo, Location) {
 						IsCompilerGenerated = true
 					};
@@ -938,11 +943,10 @@ namespace Mono.CSharp
 
 				var cond = new BooleanExpression (new Binary (Binary.Operator.Inequality,
 					new Cast (new TypeExpression (Module.Compiler.BuiltinTypes.Object, Location), new LocalVariableReference (obj1, Location), Location),
-					new Cast (new TypeExpression (Module.Compiler.BuiltinTypes.Object, Location), new LocalVariableReference (obj2, Location), Location),
-					Location));
+					new Cast (new TypeExpression (Module.Compiler.BuiltinTypes.Object, Location), new LocalVariableReference (obj2, Location), Location)));
 
 				var body = new ExplicitBlock (block, Location, Location);
-				block.AddStatement (new Do (body, cond, Location));
+				block.AddStatement (new Do (body, cond, Location, Location));
 
 				body.AddStatement (new StatementExpression (
 					new SimpleAssign (new LocalVariableReference (obj2, Location), new LocalVariableReference (obj1, Location))));
@@ -1194,12 +1198,15 @@ namespace Mono.CSharp
 				if (!method_data.Define (parent.PartialContainer, method.GetFullName (MemberName)))
 					return null;
 
-				MethodBuilder mb = method_data.MethodBuilder;
+				method_data.DefineMethodBuilder (parent.PartialContainer, ParameterInfo);
 
-				Spec = new MethodSpec (MemberKind.Method, parent.PartialContainer.Definition, this, ReturnType, mb, ParameterInfo, method.ModFlags);
+				if (Compiler.Settings.WriteMetadataOnly)
+					block = null;
+
+				Spec = new MethodSpec (MemberKind.Method, parent.PartialContainer.Definition, this, ReturnType, ParameterInfo, method.ModFlags);
 				Spec.IsAccessor = true;
 
-				return mb;
+				return method_data.MethodBuilder;
 			}
 
 			public override TypeSpec ReturnType {

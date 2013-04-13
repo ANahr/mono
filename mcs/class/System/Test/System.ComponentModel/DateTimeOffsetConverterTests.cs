@@ -26,7 +26,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_4_0
+#if NET_4_0 && !MOBILE
 
 using System;
 using System.ComponentModel;
@@ -165,6 +165,7 @@ namespace MonoTests.System.ComponentModel
 		}
 
 		[Test]
+		[SetCulture("en-US")]
 		public void ConvertToString ()
 		{
 			CultureInfo ciUS = new CultureInfo("en-US");

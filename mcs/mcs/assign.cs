@@ -310,6 +310,12 @@ namespace Mono.CSharp {
 			}
 		}
 
+		public override Location StartLocation {
+			get {
+				return target.StartLocation;
+			}
+		}
+
 		public override bool ContainsEmitWithAwait ()
 		{
 			return target.ContainsEmitWithAwait () || source.ContainsEmitWithAwait ();
@@ -536,14 +542,20 @@ namespace Mono.CSharp {
 		// Keep resolved value because field initializers have their own rules
 		//
 		ExpressionStatement resolved;
-		IMemberContext mc;
+		FieldBase mc;
 
-		public FieldInitializer (FieldSpec spec, Expression expression, IMemberContext mc)
-			: base (new FieldExpr (spec, expression.Location), expression, expression.Location)
+		public FieldInitializer (FieldBase mc, Expression expression, Location loc)
+			: base (new FieldExpr (mc.Spec, expression.Location), expression, loc)
 		{
 			this.mc = mc;
-			if (!spec.IsStatic)
+			if (!mc.IsStatic)
 				((FieldExpr)target).InstanceExpression = new CompilerGeneratedThis (mc.CurrentType, expression.Location);
+		}
+
+		public override Location StartLocation {
+			get {
+				return loc;
+			}
 		}
 
 		protected override Expression DoResolve (ResolveContext ec)
@@ -649,15 +661,15 @@ namespace Mono.CSharp {
 		Expression right;
 		Expression left;
 
-		public CompoundAssign (Binary.Operator op, Expression target, Expression source, Location loc)
-			: base (target, source, loc)
+		public CompoundAssign (Binary.Operator op, Expression target, Expression source)
+			: base (target, source, target.Location)
 		{
 			right = source;
 			this.op = op;
 		}
 
-		public CompoundAssign (Binary.Operator op, Expression target, Expression source, Expression left, Location loc)
-			: this (op, target, source, loc)
+		public CompoundAssign (Binary.Operator op, Expression target, Expression source, Expression left)
+			: this (op, target, source)
 		{
 			this.left = left;
 		}
@@ -720,7 +732,7 @@ namespace Mono.CSharp {
 			if (left == null)
 				left = new TargetExpression (target);
 
-			source = new Binary (op, left, right, true, loc);
+			source = new Binary (op, left, right, true);
 
 			if (target is DynamicMemberAssignable) {
 				Arguments targs = ((DynamicMemberAssignable) target).Arguments;

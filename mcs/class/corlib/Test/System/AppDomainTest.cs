@@ -27,6 +27,8 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
+#if !MOBILE
+
 using NUnit.Framework;
 using System;
 using System.Collections;
@@ -1832,7 +1834,7 @@ namespace MonoTests.System
 				Assert.AreEqual (typeof (MissingMethodException), ex.GetType (), "#2");
 				Assert.IsNull (ex.InnerException, "#3");
 				Assert.IsNotNull (ex.Message, "#4");
-				Assert.IsTrue (ex.Message.IndexOf (Consts.AssemblyCorlib) != -1, "#5");
+				Assert.IsTrue (ex.Message.IndexOf (typeof (object).Assembly.FullName) != -1, "#5");
 			}
 		}
 
@@ -1848,7 +1850,7 @@ namespace MonoTests.System
 				Assert.AreEqual (typeof (MissingMethodException), ex.GetType (), "#2");
 				Assert.IsNull (ex.InnerException, "#3");
 				Assert.IsNotNull (ex.Message, "#4");
-				Assert.IsTrue (ex.Message.IndexOf (Consts.AssemblyCorlib) != -1, "#5");
+				Assert.IsTrue (ex.Message.IndexOf (typeof (object).Assembly.FullName) != -1, "#5");
 			}
 		}
 
@@ -1865,7 +1867,7 @@ namespace MonoTests.System
 				Assert.AreEqual (typeof (MissingMethodException), ex.GetType (), "#2");
 				Assert.IsNull (ex.InnerException, "#3");
 				Assert.IsNotNull (ex.Message, "#4");
-				Assert.IsTrue (ex.Message.IndexOf (Consts.AssemblyCorlib) != -1, "#5");
+				Assert.IsTrue (ex.Message.IndexOf (typeof (object).Assembly.FullName) != -1, "#5");
 			}
 		}
 
@@ -1883,7 +1885,7 @@ namespace MonoTests.System
 				Assert.AreEqual (typeof (MissingMethodException), ex.GetType (), "#2");
 				Assert.IsNull (ex.InnerException, "#3");
 				Assert.IsNotNull (ex.Message, "#4");
-				Assert.IsTrue (ex.Message.IndexOf (Consts.AssemblyCorlib) != -1, "#5");
+				Assert.IsTrue (ex.Message.IndexOf (typeof (object).Assembly.FullName) != -1, "#5");
 			}
 		}
 #endif
@@ -3553,3 +3555,5 @@ namespace MonoTests.System
 		static byte [] pk_token = { 0xce, 0x52, 0x76, 0xd8, 0x68, 0x7e, 0Xc6, 0xdc };
 	}
 }
+
+#endif
