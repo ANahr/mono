@@ -68,6 +68,9 @@ namespace Mono.CSharp.Nullable
 				MemberFilter.Method ("GetValueOrDefault", 0, ParametersCompiled.EmptyReadOnlyParameters, null), BindingRestriction.None);
 		}
 
+		//
+		// Don't use unless really required for correctness, see Unwrap::Emit
+		//
 		public static MethodSpec GetValue (TypeSpec nullableType)
 		{
 			return (MethodSpec) MemberCache.FindMember (nullableType,
@@ -142,6 +145,11 @@ namespace Mono.CSharp.Nullable
 			var call = new CallEmitter ();
 			call.InstanceExpression = this;
 
+			//
+			// Using GetGetValueOrDefault is prefered because JIT can possibly
+			// inline it whereas Value property contains a throw which is very
+			// unlikely to be inlined
+			//
 			if (useDefaultValue)
 				call.EmitPredefined (ec, NullableInfo.GetGetValueOrDefault (expr.Type), null);
 			else
@@ -312,7 +320,7 @@ namespace Mono.CSharp.Nullable
 		public static Constant CreateFromExpression (ResolveContext ec, Expression e)
 		{
 			ec.Report.Warning (458, 2, e.Location, "The result of the expression is always `null' of type `{0}'",
-				TypeManager.CSharpName (e.Type));
+				e.Type.GetSignatureForError ());
 
 			return ReducedExpression.Create (Create (e.Type, e.Location), e);
 		}
@@ -539,8 +547,8 @@ namespace Mono.CSharp.Nullable
 		Expression user_operator;
 		MethodSpec wrap_ctor;
 
-		public LiftedBinaryOperator (Binary.Operator op, Expression left, Expression right, Location loc)
-			: base (op, left, right, loc)
+		public LiftedBinaryOperator (Binary.Operator op, Expression left, Expression right)
+			: base (op, left, right)
 		{
 		}
 
@@ -583,11 +591,11 @@ namespace Mono.CSharp.Nullable
 			Constant c = new BoolConstant (ec.BuiltinTypes, Oper == Operator.Inequality, loc);
 
 			if ((Oper & Operator.EqualityMask) != 0) {
-				ec.Report.Warning (472, 2, loc, "The result of comparing value type `{0}' with null is `{1}'",
-					TypeManager.CSharpName (expr.Type), c.GetValueAsLiteral ());
+				ec.Report.Warning (472, 2, loc, "The result of comparing value type `{0}' with null is always `{1}'",
+					expr.Type.GetSignatureForError (), c.GetValueAsLiteral ());
 			} else {
 				ec.Report.Warning (464, 2, loc, "The result of comparing type `{0}' with null is always `{1}'",
-					TypeManager.CSharpName (expr.Type), c.GetValueAsLiteral ());
+					expr.Type.GetSignatureForError (), c.GetValueAsLiteral ());
 			}
 
 			return ReducedExpression.Create (c, this);
@@ -1001,11 +1009,11 @@ namespace Mono.CSharp.Nullable
 		Expression left, right;
 		Unwrap unwrap;
 
-		public NullCoalescingOperator (Expression left, Expression right, Location loc)
+		public NullCoalescingOperator (Expression left, Expression right)
 		{
 			this.left = left;
 			this.right = right;
-			this.loc = loc;
+			this.loc = left.Location;
 		}
 
 		public Expression LeftExpression {
@@ -1256,7 +1264,7 @@ namespace Mono.CSharp.Nullable
 
 			call = new CallEmitter ();
 			call.InstanceExpression = lt;
-			call.EmitPredefined (ec, NullableInfo.GetValue (expr.Type), null);
+			call.EmitPredefined (ec, NullableInfo.GetGetValueOrDefault (expr.Type), null);
 
 			lt.Release (ec);
 

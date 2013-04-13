@@ -240,6 +240,8 @@ namespace Mono.CSharp {
 		// contain all base interface members, so the Lookup code
 		// can use simple inheritance rules.
 		//
+		// Does not work recursively because of generic interfaces
+		//
 		public void AddInterface (TypeSpec iface)
 		{
 			var cache = iface.MemberCache;
@@ -258,18 +260,19 @@ namespace Mono.CSharp {
 				}
 
 				foreach (var ce in entry.Value) {
+					//
+					// When two or more different base interfaces implemenent common
+					// interface
+					//
+					// I : IA, IFoo
+					// IA : IFoo
+					//
 					if (list.Contains (ce))
 						continue;
 
 					if (AddInterfaceMember (ce, ref list))
 						member_hash[entry.Key] = list;
 				}
-			}
-
-			// Add also all base interfaces
-			if (iface.Interfaces != null) {
-				foreach (var base_iface in iface.Interfaces)
-					AddInterface (base_iface);
 			}
 		}
 
@@ -296,13 +299,14 @@ namespace Mono.CSharp {
 			if (member.Kind == MemberKind.Operator) {
 				var dt = member.DeclaringType;
 
+
 				//
 				// Some core types have user operators but they cannot be used like normal
 				// user operators as they are predefined and therefore having different
 				// rules (e.g. binary operators) by not setting the flag we hide them for
 				// user conversions
 				//
-				if (!BuiltinTypeSpec.IsPrimitiveType (dt)) {
+				if (!BuiltinTypeSpec.IsPrimitiveType (dt) || dt.BuiltinType == BuiltinTypeSpec.Type.Char) {
 					switch (dt.BuiltinType) {
 					case BuiltinTypeSpec.Type.String:
 					case BuiltinTypeSpec.Type.Delegate:
@@ -435,12 +439,15 @@ namespace Mono.CSharp {
 		// A special method to work with member lookup only. It returns a list of all members named @name
 		// starting from @container. It's very performance sensitive
 		//
-		public static IList<MemberSpec> FindMembers (TypeSpec container, string name, bool declaredOnly)
+		// declaredOnlyClass cannot be used interfaces. Manual filtering is required because names are
+		// compacted
+		//
+		public static IList<MemberSpec> FindMembers (TypeSpec container, string name, bool declaredOnlyClass)
 		{
 			IList<MemberSpec> applicable;
 
 			do {
-				if (container.MemberCache.member_hash.TryGetValue (name, out applicable) || declaredOnly)
+				if (container.MemberCache.member_hash.TryGetValue (name, out applicable) || declaredOnlyClass)
 					return applicable;
 
 				container = container.BaseType;
@@ -902,7 +909,7 @@ namespace Mono.CSharp {
 		public static IList<MemberSpec> GetUserOperator (TypeSpec container, Operator.OpType op, bool declaredOnly)
 		{
 			IList<MemberSpec> found = null;
-
+			bool shared_list = true;
 			IList<MemberSpec> applicable;
 			do {
 				var mc = container.MemberCache;
@@ -932,10 +939,13 @@ namespace Mono.CSharp {
 									found = new List<MemberSpec> ();
 									found.Add (applicable[i]);
 								} else {
-									var prev = found as List<MemberSpec>;
-									if (prev == null) {
+									List<MemberSpec> prev;
+									if (shared_list) {
+										shared_list = false;
 										prev = new List<MemberSpec> (found.Count + 1);
 										prev.AddRange (found);
+									} else {
+										prev = (List<MemberSpec>) found;
 									}
 
 									prev.Add (applicable[i]);
@@ -944,12 +954,16 @@ namespace Mono.CSharp {
 						} else {
 							if (found == null) {
 								found = applicable;
+								shared_list = true;
 							} else {
-								var merged = found as List<MemberSpec>;
-								if (merged == null) {
+								List<MemberSpec> merged;
+								if (shared_list) {
+									shared_list = false;
 									merged = new List<MemberSpec> (found.Count + applicable.Count);
 									merged.AddRange (found);
 									found = merged;
+								} else {
+									merged = (List<MemberSpec>) found;
 								}
 
 								merged.AddRange (applicable);
@@ -1431,9 +1445,12 @@ namespace Mono.CSharp {
 									"A partial method declaration and partial method implementation must be both `static' or neither");
 							}
 
-							Report.SymbolRelatedToPreviousError (ce);
-							Report.Error (764, member.Location,
-								"A partial method declaration and partial method implementation must be both `unsafe' or neither");
+							if ((method_a.ModFlags & Modifiers.UNSAFE) != (method_b.ModFlags & Modifiers.UNSAFE)) {
+								Report.SymbolRelatedToPreviousError (ce);
+								Report.Error (764, member.Location,
+									"A partial method declaration and partial method implementation must be both `unsafe' or neither");
+							}
+
 							return false;
 						}
 

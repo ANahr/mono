@@ -36,7 +36,6 @@ namespace Mono.CSharp
 	public interface IAssemblyDefinition
 	{
 		string FullName { get; }
-		bool HasExtensionMethod { get; }
 		bool IsCLSCompliant { get; }
 		bool IsMissing { get; }
 		string Name { get; }
@@ -132,12 +131,6 @@ namespace Mono.CSharp
 			}
 		}
 
-		public bool HasExtensionMethod {
-			get {
-				return module.HasExtensionMethod;
-			}
-		}
-
 		public bool HasCLSCompliantAttribute {
 			get {
 				return cls_attribute != null;
@@ -160,6 +153,8 @@ namespace Mono.CSharp
 				return false;
 			}
 		}
+
+		public bool IsSatelliteAssembly { get; private set; }
 
 		public string Name {
 			get {
@@ -221,6 +216,7 @@ namespace Mono.CSharp
 					builder_extra.SetCulture (value, a.Location);
 				}
 
+				IsSatelliteAssembly = true;
 				return;
 			}
 
@@ -292,7 +288,7 @@ namespace Mono.CSharp
 				} else if (emitted_forwarders.ContainsKey (t.MemberDefinition)) {
 					Report.SymbolRelatedToPreviousError (emitted_forwarders[t.MemberDefinition].Location, null);
 					Report.Error (739, a.Location, "A duplicate type forward of type `{0}'",
-						TypeManager.CSharpName (t));
+						t.GetSignatureForError ());
 					return;
 				}
 
@@ -301,13 +297,13 @@ namespace Mono.CSharp
 				if (t.MemberDefinition.DeclaringAssembly == this) {
 					Report.SymbolRelatedToPreviousError (t);
 					Report.Error (729, a.Location, "Cannot forward type `{0}' because it is defined in this assembly",
-						TypeManager.CSharpName (t));
+						t.GetSignatureForError ());
 					return;
 				}
 
 				if (t.IsNested) {
 					Report.Error (730, a.Location, "Cannot forward type `{0}' because it is a nested type",
-						TypeManager.CSharpName (t));
+						t.GetSignatureForError ());
 					return;
 				}
 
@@ -464,26 +460,28 @@ namespace Mono.CSharp
 				}
 			}
 
-			if (!wrap_non_exception_throws_custom) {
-				PredefinedAttribute pa = module.PredefinedAttributes.RuntimeCompatibility;
-				if (pa.IsDefined && pa.ResolveBuilder ()) {
-					var prop = module.PredefinedMembers.RuntimeCompatibilityWrapNonExceptionThrows.Get ();
-					if (prop != null) {
-						AttributeEncoder encoder = new AttributeEncoder ();
-						encoder.EncodeNamedPropertyArgument (prop, new BoolLiteral (Compiler.BuiltinTypes, true, Location.Null));
-						SetCustomAttribute (pa.Constructor, encoder.ToArray ());
+			if (!IsSatelliteAssembly) {
+				if (!wrap_non_exception_throws_custom) {
+					PredefinedAttribute pa = module.PredefinedAttributes.RuntimeCompatibility;
+					if (pa.IsDefined && pa.ResolveBuilder ()) {
+						var prop = module.PredefinedMembers.RuntimeCompatibilityWrapNonExceptionThrows.Get ();
+						if (prop != null) {
+							AttributeEncoder encoder = new AttributeEncoder ();
+							encoder.EncodeNamedPropertyArgument (prop, new BoolLiteral (Compiler.BuiltinTypes, true, Location.Null));
+							SetCustomAttribute (pa.Constructor, encoder.ToArray ());
+						}
 					}
 				}
-			}
 
-			if (declarative_security != null) {
+				if (declarative_security != null) {
 #if STATIC
-				foreach (var entry in declarative_security) {
-					Builder.__AddDeclarativeSecurity (entry);
-				}
+					foreach (var entry in declarative_security) {
+						Builder.__AddDeclarativeSecurity (entry);
+					}
 #else
-				throw new NotSupportedException ("Assembly-level security");
+					throw new NotSupportedException ("Assembly-level security");
 #endif
+				}
 			}
 
 			CheckReferencesPublicToken ();
@@ -624,9 +622,16 @@ namespace Mono.CSharp
 					new MemberAccess (system_security_permissions, "SecurityPermissionAttribute"),
 					new Arguments[] { pos, named }, loc, false);
 				g.AttachTo (module, module);
-				var ctor = g.Resolve ();
-				if (ctor != null) {
-					g.ExtractSecurityPermissionSet (ctor, ref declarative_security);
+
+				// Disable no-location warnings (e.g. obsolete) for compiler generated attribute
+				Compiler.Report.DisableReporting ();
+				try {
+					var ctor = g.Resolve ();
+					if (ctor != null) {
+						g.ExtractSecurityPermissionSet (ctor, ref declarative_security);
+					}
+				} finally {
+					Compiler.Report.EnableReporting ();
 				}
 			}
 
@@ -1104,8 +1109,8 @@ namespace Mono.CSharp
 			this.compiler = compiler;
 
 			paths = new List<string> ();
-			paths.AddRange (compiler.Settings.ReferencesLookupPaths);
 			paths.Add (Directory.GetCurrentDirectory ());
+			paths.AddRange (compiler.Settings.ReferencesLookupPaths);
 		}
 
 		public abstract bool HasObjectType (T assembly);

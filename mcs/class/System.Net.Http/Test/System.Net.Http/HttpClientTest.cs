@@ -65,6 +65,26 @@ namespace MonoTests.System.Net.Http
 			}
 		}
 
+		class HttpClientHandlerMock : HttpClientHandler
+		{
+			public Func<HttpRequestMessage, Task<HttpResponseMessage>> OnSend;
+			public Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> OnSendFull;
+
+			protected override Task<HttpResponseMessage> SendAsync (HttpRequestMessage request, CancellationToken cancellationToken)
+			{
+				if (OnSend != null)
+					return OnSend (request);
+
+				if (OnSendFull != null)
+					return OnSendFull (request, cancellationToken);
+
+				Assert.Fail ("Send");
+				return null;
+			}
+		}
+
+		const int WaitTimeout = 2500;
+
 		string port, TestHost, LocalServer;
 
 		[SetUp]
@@ -86,7 +106,7 @@ namespace MonoTests.System.Net.Http
 			var client = new HttpClient ();
 			Assert.IsNull (client.BaseAddress, "#1");
 			Assert.IsNotNull (client.DefaultRequestHeaders, "#2");	// TODO: full check
-			Assert.AreEqual (0x10000, client.MaxResponseContentBufferSize, "#3");
+			Assert.AreEqual (int.MaxValue, client.MaxResponseContentBufferSize, "#3");
 			Assert.AreEqual (TimeSpan.FromSeconds (100), client.Timeout, "#4");
 		}
 
@@ -108,7 +128,7 @@ namespace MonoTests.System.Net.Http
 			};
 
 			var t = Task.Factory.StartNew (() => {
-				client.SendAsync (request).Wait ();
+				client.SendAsync (request).Wait (WaitTimeout);
 			});
 
 			Assert.IsTrue (mre.WaitOne (500), "#1");
@@ -122,7 +142,7 @@ namespace MonoTests.System.Net.Http
 				return Task.FromResult (new HttpResponseMessage ());
 			};
 
-			client.SendAsync (request).Wait ();
+			client.SendAsync (request).Wait (WaitTimeout);
 		}
 
 		[Test]
@@ -144,10 +164,10 @@ namespace MonoTests.System.Net.Http
 				return Task.FromResult (new HttpResponseMessage ());
 			};
 
-			client.SendAsync (request).Wait ();
+			client.SendAsync (request).Wait (WaitTimeout);
 
 			request = new HttpRequestMessage (HttpMethod.Get, "http://xamarin.com");
-			client.SendAsync (request).Wait ();
+			client.SendAsync (request).Wait (WaitTimeout);
 		}
 
 		[Test]
@@ -404,7 +424,7 @@ namespace MonoTests.System.Net.Http
 			try {
 				var client = new HttpClient ();
 				var request = new HttpRequestMessage (HttpMethod.Get, LocalServer);
-				request.Headers.AddWithoutValidation ("aa", "vv");
+				Assert.IsTrue (request.Headers.TryAddWithoutValidation ("aa", "vv"), "#0");
 				var response = client.SendAsync (request, HttpCompletionOption.ResponseHeadersRead).Result;
 
 				Assert.AreEqual ("", response.Content.ReadAsStringAsync ().Result, "#100");
@@ -450,7 +470,7 @@ namespace MonoTests.System.Net.Http
 			try {
 				var client = new HttpClient ();
 				var request = new HttpRequestMessage (HttpMethod.Get, LocalServer);
-				request.Headers.AddWithoutValidation ("aa", "vv");
+				Assert.IsTrue (request.Headers.TryAddWithoutValidation ("aa", "vv"), "#0");
 				var response = client.SendAsync (request, HttpCompletionOption.ResponseHeadersRead).Result;
 
 				Assert.AreEqual ("7K", response.Content.ReadAsStringAsync ().Result, "#100");
@@ -502,10 +522,10 @@ namespace MonoTests.System.Net.Http
 				var request = new HttpRequestMessage (HttpMethod.Get, LocalServer);
 
 				try {
-					client.SendAsync (request, HttpCompletionOption.ResponseContentRead).Wait ();
+					client.SendAsync (request, HttpCompletionOption.ResponseContentRead).Wait (WaitTimeout);
 					Assert.Fail ("#2");
 				} catch (AggregateException e) {
-					Assert.IsInstanceOfType (typeof (HttpRequestException), e.InnerException, "#3");
+					Assert.IsTrue (e.InnerException is HttpRequestException, "#3");
 				}
 
 			} finally {
@@ -600,14 +620,14 @@ namespace MonoTests.System.Net.Http
 		{
 			var client = new HttpClient ();
 			try {
-				client.SendAsync (null).Wait ();
+				client.SendAsync (null).Wait (WaitTimeout);
 				Assert.Fail ("#1");
 			} catch (ArgumentNullException) {
 			}
 
 			try {
 				var request = new HttpRequestMessage ();
-				client.SendAsync (request).Wait ();
+				client.SendAsync (request).Wait (WaitTimeout);
 				Assert.Fail ("#2");
 			} catch (InvalidOperationException) {
 			}
@@ -629,7 +649,7 @@ namespace MonoTests.System.Net.Http
 
 			try {
 				// Broken by design
-				client.SendAsync (request).Wait ();
+				client.SendAsync (request).Wait (WaitTimeout);
 				Assert.Fail ("#2");
 			} catch (Exception) {
 			}
@@ -645,12 +665,125 @@ namespace MonoTests.System.Net.Http
 
 			mh.OnSend = l => Task.FromResult (new HttpResponseMessage ());
 
-			client.SendAsync (request).Wait ();
+			client.SendAsync (request).Wait (WaitTimeout);
 			try {
-				client.SendAsync (request).Wait ();
+				client.SendAsync (request).Wait (WaitTimeout);
 				Assert.Fail ("#1");
 			} catch (InvalidOperationException) {
 			}
+		}
+
+		[Test]
+		public void GetString_RelativeUri ()
+		{
+			var client = new HttpClient ();
+			client.BaseAddress = new Uri ("http://en.wikipedia.org/wiki/");
+			var uri = new Uri ("Computer", UriKind.Relative);
+
+			Assert.That (client.GetStringAsync (uri).Result != null);
+			Assert.That (client.GetStringAsync ("Computer").Result != null);
+		}
+
+		[Test]
+		public void GetByteArray_ServerError ()
+		{
+			var listener = CreateListener (l => {
+				var response = l.Response;
+				response.StatusCode = 500;
+				l.Response.OutputStream.WriteByte (72);
+			});
+
+			try {
+				var client = new HttpClient ();
+				try {
+					client.GetByteArrayAsync (LocalServer).Wait (WaitTimeout);
+					Assert.Fail ("#1");
+				} catch (AggregateException e) {
+					Assert.IsTrue (e.InnerException is HttpRequestException , "#2");
+				}
+			} finally {
+				listener.Close ();
+			}
+		}
+
+		[Test]
+		public void DisallowAutoRedirect ()
+		{
+			var listener = CreateListener (l => {
+				var request = l.Request;
+				var response = l.Response;
+				
+				response.StatusCode = (int)HttpStatusCode.Moved;
+				response.RedirectLocation = "http://xamarin.com/";
+			});
+
+			try {
+				var chandler = new HttpClientHandler ();
+				chandler.AllowAutoRedirect = false;
+				var client = new HttpClient (chandler);
+
+				try {
+					client.GetStringAsync (LocalServer).Wait (WaitTimeout);
+					Assert.Fail ("#1");
+				} catch (AggregateException e) {
+					Assert.IsTrue (e.InnerException is HttpRequestException, "#2");
+				}
+			} finally {
+				listener.Abort ();
+				listener.Close ();
+			}
+		}
+
+		[Test]
+		/*
+		 * Properties may only be modified before sending the first request.
+		 */
+		public void ModifyHandlerAfterFirstRequest ()
+		{
+			var chandler = new HttpClientHandler ();
+			chandler.AllowAutoRedirect = true;
+			var client = new HttpClient (chandler, true);
+
+			var listener = CreateListener (l => {
+				var response = l.Response;
+				response.StatusCode = 200;
+				response.OutputStream.WriteByte (55);
+			});
+
+			try {
+				client.GetStringAsync (LocalServer).Wait (WaitTimeout);
+				try {
+					chandler.AllowAutoRedirect = false;
+					Assert.Fail ("#1");
+				} catch (InvalidOperationException) {
+					;
+				}
+			} finally {
+				listener.Abort ();
+				listener.Close ();
+			}
+		}
+
+		[Test]
+		/*
+		 * However, this policy is not enforced for custom handlers and there
+		 * is also no way a derived class could tell its HttpClientHandler parent
+		 * that it just sent a request.
+		 * 
+		 */
+		public void ModifyHandlerAfterFirstRequest_Mock ()
+		{
+			var ch = new HttpClientHandlerMock ();
+			ch.AllowAutoRedirect = true;
+
+			var client = new HttpClient (ch);
+
+			ch.OnSend = (l) => {
+				return Task.FromResult (new HttpResponseMessage ());
+			};
+
+			client.GetAsync ("http://xamarin.com").Wait (WaitTimeout);
+			ch.AllowAutoRedirect = false;
 		}
 
 		HttpListener CreateListener (Action<HttpListenerContext> contextAssert)

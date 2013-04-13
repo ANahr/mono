@@ -50,8 +50,11 @@ namespace System.IO
 	{
 		public static readonly Stream Null = new NullStream ();
 
+		[NonSerialized]
 		Func<byte[], int, int, int> async_read;
+		[NonSerialized]
 		Action<byte[], int, int> async_write;
+		[NonSerialized]
 		AutoResetEvent async_event;
 
 		protected Stream ()
@@ -237,7 +240,7 @@ namespace System.IO
 			}
 		}
 
-#if MOONLIGHT || NET_4_0 || MOBILE
+#if NET_4_0
 		public void CopyTo (Stream destination)
 		{
 			CopyTo (destination, 16*1024);

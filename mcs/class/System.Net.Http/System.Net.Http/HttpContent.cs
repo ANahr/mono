@@ -37,9 +37,9 @@ namespace System.Net.Http
 	{
 		sealed class FixedMemoryStream : MemoryStream
 		{
-			readonly int maxSize;
+			readonly long maxSize;
 			
-			public FixedMemoryStream (int maxSize)
+			public FixedMemoryStream (long maxSize)
 				: base ()
 			{
 				this.maxSize = maxSize;
@@ -85,6 +85,9 @@ namespace System.Net.Http
 			if (stream == null)
 				throw new ArgumentNullException ("stream");
 
+			if (buffer != null)
+				return buffer.CopyToAsync (stream);
+
 			return SerializeToStreamAsync (stream, context);
 		}
 
@@ -94,7 +97,7 @@ namespace System.Net.Http
 			return buffer;
 		}
 		
-		static FixedMemoryStream CreateFixedMemoryStream (int maxBufferSize)
+		static FixedMemoryStream CreateFixedMemoryStream (long maxBufferSize)
 		{
 			return new FixedMemoryStream (maxBufferSize);
 		}
@@ -116,10 +119,10 @@ namespace System.Net.Http
 
 		public Task LoadIntoBufferAsync ()
 		{
-			return LoadIntoBufferAsync (0x2000);
+			return LoadIntoBufferAsync (65536);
 		}
 
-		public async Task LoadIntoBufferAsync (int maxBufferSize)
+		public async Task LoadIntoBufferAsync (long maxBufferSize)
 		{
 			if (disposed)
 				throw new ObjectDisposedException (GetType ().ToString ());
@@ -136,6 +139,9 @@ namespace System.Net.Http
 		{
 			if (disposed)
 				throw new ObjectDisposedException (GetType ().ToString ());
+
+			if (buffer != null)
+				return new MemoryStream (buffer.GetBuffer (), 0, (int)buffer.Length, false);
 
 			if (stream == null)
 				stream = await CreateContentReadStreamAsync ().ConfigureAwait (false);

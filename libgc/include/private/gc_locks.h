@@ -223,12 +223,22 @@
 #       define GC_CLEAR_DEFINED
 #    endif /* ALPHA */
 #    ifdef ARM32
+#ifdef __native_client__
+#define NACL_ALIGN() ".align 4\n"
+#define MASK_REGISTER(reg) "bic " reg ", " reg ", #0xc0000000\n"
+#else
+#define NACL_ALIGN()
+#define MASK_REGISTER(reg)
+#endif
         inline static int GC_test_and_set(volatile unsigned int *addr) {
 #if defined(__ARM_ARCH_6__) || defined(__ARM_ARCH_7A__) || defined(__ARM_ARCH_7__)
           int ret, tmp;
           __asm__ __volatile__ (
                                  "1:\n"
+                                 NACL_ALIGN()
+                                 MASK_REGISTER("%3")
                                  "ldrex %0, [%3]\n"
+                                 MASK_REGISTER("%3")
                                  "strex %1, %2, [%3]\n" 
                                  "teq %1, #0\n"
                                  "bne 1b\n"
@@ -242,7 +252,8 @@
            * bus because there are no SMP ARM machines.  If/when there are,
            * this code will likely need to be updated. */
           /* See linuxthreads/sysdeps/arm/pt-machine.h in glibc-2.1 */
-          __asm__ __volatile__("swp %0, %1, [%2]"
+          __asm__ __volatile__(MASK_REGISTER("%2")
+                               "swp %0, %1, [%2]"
       		  	     : "=&r"(oldval)
       			     : "r"(1), "r"(addr)
 			     : "memory");
@@ -475,6 +486,9 @@
         inline static GC_bool GC_compare_and_exchange(volatile GC_word *addr,
             GC_word old, GC_word new_val) 
         {
+#         if HAS___SYNC_BOOL_COMPARE_AND_SWAP
+            return __sync_bool_compare_and_swap(addr, old, new_val);
+#         else
             unsigned long result, dummy;
             __asm__ __volatile__(
                 "1:\tldarx %0,0,%5\n"
@@ -491,12 +505,16 @@
                 :  "r" (new_val), "r" (old), "2"(addr)
                 : "cr0","memory");
             return (GC_bool) result;
+#         endif
         }
 #       else
         /* Returns TRUE if the comparison succeeded. */
         inline static GC_bool GC_compare_and_exchange(volatile GC_word *addr,
             GC_word old, GC_word new_val) 
         {
+#         if HAS___SYNC_BOOL_COMPARE_AND_SWAP
+            return __sync_bool_compare_and_swap(addr, old, new_val);
+#         else
             int result, dummy;
             __asm__ __volatile__(
                 "1:\tlwarx %0,0,%5\n"
@@ -513,6 +531,7 @@
                 :  "r" (new_val), "r" (old), "2"(addr)
                 : "cr0","memory");
             return (GC_bool) result;
+#         endif
         }
 #       endif
 #      endif /* !GENERIC_COMPARE_AND_SWAP */

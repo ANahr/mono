@@ -2,7 +2,7 @@
 
 #if defined(HAVE_SGEN_GC) && defined(HOST_WIN32)
 
-#include <windows.h>
+#include "io-layer/io-layer.h"
 
 #include "metadata/sgen-gc.h"
 #include "metadata/gc-internal.h"
@@ -68,11 +68,10 @@ sgen_suspend_thread (SgenThreadInfo *info)
 	info->regs [5] = context.Eax;
 	info->regs [6] = context.Ebp;
 	info->regs [7] = context.Esp;
-	info->stopped_regs = &info->regs;
 
 	/* Notify the JIT */
 	if (mono_gc_get_gc_callbacks ()->thread_suspend_func)
-		mono_gc_get_gc_callbacks ()->thread_suspend_func (info->runtime_data, NULL);
+		mono_gc_get_gc_callbacks ()->thread_suspend_func (info->runtime_data, NULL, NULL);
 
 	return TRUE;
 }
@@ -91,6 +90,9 @@ sgen_thread_handshake (BOOL suspend)
 	int count = 0;
 
 	FOREACH_THREAD_SAFE (info) {
+		if (info->joined_stw == suspend)
+			continue;
+		info->joined_stw = suspend;
 		if (info == current)
 			continue;
 		if (info->gc_disabled)
@@ -108,7 +110,6 @@ sgen_thread_handshake (BOOL suspend)
 			if (!sgen_resume_thread (info))
 				continue;
 		}
-
 		++count;
 	} END_FOREACH_THREAD_SAFE
 	return count;

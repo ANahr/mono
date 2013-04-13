@@ -144,7 +144,7 @@ namespace Mono.CSharp
 		{
 			var ctx = module.Compiler;
 			foreach (var p in types) {
-				var found = PredefinedType.Resolve (module, p.Kind, p.Namespace, p.Name, p.Arity);
+				var found = PredefinedType.Resolve (module, p.Kind, p.Namespace, p.Name, p.Arity, true, true);
 				if (found == null || found == p)
 					continue;
 
@@ -340,6 +340,7 @@ namespace Mono.CSharp
 		public readonly PredefinedMember<MethodSpec> AsyncVoidMethodBuilderSetStateMachine;
 		public readonly PredefinedMember<MethodSpec> AsyncVoidMethodBuilderOnCompleted;
 		public readonly PredefinedMember<MethodSpec> AsyncVoidMethodBuilderOnCompletedUnsafe;
+		public readonly PredefinedMember<MethodSpec> AsyncStateMachineAttributeCtor;
 		public readonly PredefinedMember<MethodSpec> DebuggerBrowsableAttributeCtor;
 		public readonly PredefinedMember<MethodSpec> DecimalCtor;
 		public readonly PredefinedMember<MethodSpec> DecimalCtorInt;
@@ -549,6 +550,10 @@ namespace Mono.CSharp
 							}, false),
 					btypes.Void));
 
+			AsyncStateMachineAttributeCtor = new PredefinedMember<MethodSpec> (module, atypes.AsyncStateMachine,
+				MemberFilter.Constructor (ParametersCompiled.CreateFullyResolved (
+					btypes.Type)));
+
 			DebuggerBrowsableAttributeCtor = new PredefinedMember<MethodSpec> (module, atypes.DebuggerBrowsable,
 				MemberFilter.Constructor (null));
 
@@ -748,7 +753,7 @@ namespace Mono.CSharp
 			if (type != null)
 				return true;
 
-			type = Resolve (module, kind, ns, name, arity, false);
+			type = Resolve (module, kind, ns, name, arity, false, false);
 			return type != null;
 		}
 
@@ -757,17 +762,21 @@ namespace Mono.CSharp
 			return ns + "." + name;
 		}
 
-		public static TypeSpec Resolve (ModuleContainer module, MemberKind kind, string ns, string name, int arity)
+		public static TypeSpec Resolve (ModuleContainer module, MemberKind kind, string ns, string name, int arity, bool required, bool reportErrors)
 		{
-			return Resolve (module, kind, ns, name, arity, true);
-		}
+			//
+			// Cannot call it with true because it could create non-existent namespaces for
+			// predefined types. It's set to true only for build-in types which all must
+			// exist therefore it does not matter, for predefined types we don't want to create
+			// fake namespaces when type is optional and does not exist (e.g. System.Linq).
+			//
+			Namespace type_ns = module.GlobalRootNamespace.GetNamespace (ns, required);
+			IList<TypeSpec> found = null;
+			if (type_ns != null)
+				found = type_ns.GetAllTypes (name);
 
-		public static TypeSpec Resolve (ModuleContainer module, MemberKind kind, string ns, string name, int arity, bool reportErrors)
-		{
-			Namespace type_ns = module.GlobalRootNamespace.GetNamespace (ns, true);
-			var found = type_ns.GetAllTypes (name);
 			if (found == null) {
-				if (reportErrors)
+				if (reportErrors )
 					module.Compiler.Report.Error (518, "The predefined type `{0}.{1}' is not defined or imported", ns, name);
 
 				return null;
@@ -837,13 +846,13 @@ namespace Mono.CSharp
 		public TypeSpec Resolve ()
 		{
 			if (type == null)
-				type = Resolve (module, kind, ns, name, arity);
+				type = Resolve (module, kind, ns, name, arity, false, true);
 
 			return type;
 		}
 	}
 
-	class PredefinedMember<T> where T : MemberSpec
+	public class PredefinedMember<T> where T : MemberSpec
 	{
 		readonly ModuleContainer module;
 		T member;
@@ -960,17 +969,22 @@ namespace Mono.CSharp
 		}
 	}
 
-	partial class TypeManager {
-
-	/// <summary>
-	///   Returns the C# name of a type if possible, or the full type name otherwise
-	/// </summary>
-	static public string CSharpName (TypeSpec t)
+	public class AwaiterDefinition
 	{
-		return t.GetSignatureForError ();
+		public PropertySpec IsCompleted { get; set; }
+		public MethodSpec GetResult { get; set; }
+		public bool INotifyCompletion { get; set; }
+
+		public bool IsValidPattern {
+			get {
+				return IsCompleted != null && GetResult != null && IsCompleted.HasGet;
+			}
+		}
 	}
 
-	static public string CSharpName (IList<TypeSpec> types)
+	partial class TypeManager {
+
+	static public string CSharpName(IList<TypeSpec> types)
 	{
 		if (types.Count == 0)
 			return string.Empty;
@@ -980,7 +994,7 @@ namespace Mono.CSharp
 			if (i > 0)
 				sb.Append (",");
 
-			sb.Append (CSharpName (types [i]));
+			sb.Append (types [i].GetSignatureForError ());
 		}
 		return sb.ToString ();
 	}
@@ -1068,7 +1082,7 @@ namespace Mono.CSharp
 		rc.Compiler.Report.SymbolRelatedToPreviousError (t);
 		rc.Compiler.Report.Error (208, loc,
 			"Cannot take the address of, get the size of, or declare a pointer to a managed type `{0}'",
-			CSharpName (t));
+			t.GetSignatureForError ());
 
 		return false;	
 	}

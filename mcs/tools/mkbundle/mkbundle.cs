@@ -14,10 +14,10 @@ using System.Xml;
 using System.Collections;
 using System.Reflection;
 using System.IO;
+using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text;
-using Mono.Unix;
-using ICSharpCode.SharpZipLib.Zip.Compression.Streams;
+
 
 class MakeBundle {
 	static string output = "a.out";
@@ -88,10 +88,6 @@ class MakeBundle {
 				keeptemp = true;
 				break;
 			case "--static":
-				if (style == "windows") {
-					Console.Error.WriteLine ("The option `{0}' is not supported on this platform.", args [i]);
-					return 1;
-				}
 				static_link = true;
 				Console.WriteLine ("Note that statically linking the LGPL Mono runtime has more licensing restrictions than dynamically linking.");
 				Console.WriteLine ("See http://www.mono-project.com/Licensing for details on licensing.");
@@ -128,9 +124,31 @@ class MakeBundle {
 			case "--nomain":
 				nomain = true;
 				break;
+			case "--style":
+				if (i+1 == top) {
+					Help ();
+					return 1;
+				}
+				style = args [++i];
+				switch (style) {
+				case "windows":
+				case "mac":
+				case "linux":
+					break;
+				default:
+					Console.Error.WriteLine ("Invalid style '{0}' - only 'windows', 'mac' and 'linux' are supported for --style argument", style);
+					return 1;
+				}
+					
+				break;
 			default:
 				sources.Add (args [i]);
 				break;
+			}
+			
+			if (static_link && style == "windows") {
+				Console.Error.WriteLine ("The option `{0}' is not supported on this platform.", args [i]);
+				return 1;
 			}
 		}
 
@@ -144,6 +162,23 @@ class MakeBundle {
 		ArrayList files = new ArrayList ();
 		foreach (Assembly a in assemblies)
 			QueueAssembly (files, a.CodeBase);
+			
+		// Special casing mscorlib.dll: any specified mscorlib.dll cannot be loaded
+		// by Assembly.ReflectionFromLoadFrom(). Instead the fx assembly which runs
+		// mkbundle.exe is loaded, which is not what we want.
+		// So, replace it with whatever actually specified.
+		foreach (string srcfile in sources) {
+			if (Path.GetFileName (srcfile) == "mscorlib.dll") {
+				foreach (string file in files) {
+					if (Path.GetFileName (new Uri (file).LocalPath) == "mscorlib.dll") {
+						files.Remove (file);
+						files.Add (new Uri (Path.GetFullPath (srcfile)).LocalPath);
+						break;
+					}
+				}
+				break;
+			}
+		}
 
 		GenerateBundles (files);
 		//GenerateJitWrapper ();
@@ -159,7 +194,7 @@ class MakeBundle {
 				".globl {0}\n" +
 				"\t.section .rodata\n" +
 				"\t.p2align 5\n" +
-				"\t.type {0}, @object\n" +
+				"\t.type {0}, \"object\"\n" +
 				"\t.size {0}, {1}\n" +
 				"{0}:\n",
 				name, size);
@@ -167,7 +202,6 @@ class MakeBundle {
 		case "osx":
 			sw.WriteLine (
 				"\t.section __TEXT,__text,regular,pure_instructions\n" + 
-				"\t.section __TEXT,__picsymbolstub1,symbol_stubs,pure_instructions,32\n" + 
 				"\t.globl _{0}\n" +
 				"\t.data\n" +
 				"\t.align 4\n" +
@@ -183,6 +217,26 @@ class MakeBundle {
 				name, size);
 			break;
 		}
+	}
+	
+	static string [] chars = new string [256];
+	
+	static void WriteBuffer (StreamWriter ts, Stream stream, byte[] buffer)
+	{
+		int n;
+		
+		// Preallocate the strings we need.
+		if (chars [0] == null) {
+			for (int i = 0; i < chars.Length; i++)
+				chars [i] = string.Format ("\t.byte {0}\n", i.ToString ());
+		}
+
+		while ((n = stream.Read (buffer, 0, buffer.Length)) != 0) {
+			for (int i = 0; i < n; i++)
+				ts.Write (chars [buffer [i]]);
+		}
+
+		ts.WriteLine ();
 	}
 	
 	static void GenerateBundles (ArrayList files)
@@ -228,28 +282,24 @@ class MakeBundle {
 				
 				Stream stream = File.OpenRead (fname);
 
+				// Compression can be parallelized
 				long real_size = stream.Length;
 				int n;
 				if (compress) {
 					MemoryStream ms = new MemoryStream ();
-					DeflaterOutputStream deflate = new DeflaterOutputStream (ms);
-					while ((n = stream.Read (buffer, 0, 8192)) != 0){
+					GZipStream deflate = new GZipStream (ms, CompressionMode.Compress, leaveOpen:true);
+					while ((n = stream.Read (buffer, 0, buffer.Length)) != 0){
 						deflate.Write (buffer, 0, n);
 					}
 					stream.Close ();
-					deflate.Finish ();
+					deflate.Close ();
 					byte [] bytes = ms.GetBuffer ();
 					stream = new MemoryStream (bytes, 0, (int) ms.Length, false, false);
 				}
 
 				WriteSymbol (ts, "assembly_data_" + encoded, stream.Length);
-
-				while ((n = stream.Read (buffer, 0, 8192)) != 0){
-					for (int i = 0; i < n; i++){
-						ts.Write ("\t.byte {0}\n", buffer [i]);
-					}
-				}
-				ts.WriteLine ();
+			
+				WriteBuffer (ts, stream, buffer);
 
 				if (compress) {
 					tc.WriteLine ("extern const unsigned char assembly_data_{0} [];", encoded);
@@ -272,11 +322,7 @@ class MakeBundle {
 					Console.WriteLine (" config from: " + fname + ".config");
 					tc.WriteLine ("extern const unsigned char assembly_config_{0} [];", encoded);
 					WriteSymbol (ts, "assembly_config_" + encoded, cf.Length);
-					while ((n = cf.Read (buffer, 0, 8192)) != 0){
-						for (int i = 0; i < n; i++){
-							ts.Write ("\t.byte {0}\n", buffer [i]);
-						}
-					}
+					WriteBuffer (ts, cf, buffer);
 					ts.WriteLine ();
 					config_names.Add (new string[] {aname, encoded});
 				} catch (FileNotFoundException) {
@@ -296,12 +342,7 @@ class MakeBundle {
 				tc.WriteLine ("extern const char system_config;");
 				WriteSymbol (ts, "system_config", config_file.Length);
 
-				int n;
-				while ((n = conf.Read (buffer, 0, 8192)) != 0){
-					for (int i = 0; i < n; i++){
-						ts.Write ("\t.byte {0}\n", buffer [i]);
-					}
-				}
+				WriteBuffer (ts, conf, buffer);
 				// null terminator
 				ts.Write ("\t.byte 0\n");
 				ts.WriteLine ();
@@ -319,13 +360,7 @@ class MakeBundle {
 				tc.WriteLine ("extern const char machine_config;");
 				WriteSymbol (ts, "machine_config", machine_config_file.Length);
 
-				int n;
-				while ((n = conf.Read (buffer, 0, 8192)) != 0){
-					for (int i = 0; i < n; i++){
-						ts.Write ("\t.byte {0}\n", buffer [i]);
-					}
-				}
-				// null terminator
+				WriteBuffer (ts, conf, buffer);
 				ts.Write ("\t.byte 0\n");
 				ts.WriteLine ();
 			}
@@ -553,10 +588,10 @@ class MakeBundle {
 			return;
 		}
 
-		IntPtr buf = UnixMarshal.AllocHeap(8192);
+		IntPtr buf = Marshal.AllocHGlobal (8192);
 		if (uname (buf) != 0){
 			Console.WriteLine ("Warning: Unable to detect OS");
-			UnixMarshal.FreeHeap(buf);
+			Marshal.FreeHGlobal (buf);
 			return;
 		}
 		string os = Marshal.PtrToStringAnsi (buf);
@@ -564,7 +599,7 @@ class MakeBundle {
 		if (os == "Darwin")
 			style = "osx";
 		
-		UnixMarshal.FreeHeap(buf);
+		Marshal.FreeHGlobal (buf);
 	}
 
 	static bool IsUnix {

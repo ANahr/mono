@@ -26,7 +26,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#if NET_4_0 || MOBILE
+#if NET_4_0
 
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -103,7 +103,7 @@ namespace System.Threading.Tasks
 		
 		public virtual int MaximumConcurrencyLevel {
 			get {
-				return Environment.ProcessorCount;
+				return int.MaxValue;
 			}
 		}
 
@@ -133,9 +133,9 @@ namespace System.Threading.Tasks
 
 		protected abstract bool TryExecuteTaskInline (Task task, bool taskWasPreviouslyQueued);
 
-		internal bool RunInline (Task task)
+		internal bool RunInline (Task task, bool taskWasPreviouslyQueued)
 		{
-			if (!TryExecuteTaskInline (task, false))
+			if (!TryExecuteTaskInline (task, taskWasPreviouslyQueued))
 				return false;
 
 			if (!task.IsCompleted)

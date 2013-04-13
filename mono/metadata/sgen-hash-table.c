@@ -26,6 +26,7 @@
 #ifdef HAVE_SGEN_GC
 
 #include <mono/metadata/sgen-gc.h>
+#include <mono/metadata/sgen-hash-table.h>
 
 static void
 rehash (SgenHashTable *hash_table)
@@ -44,7 +45,7 @@ rehash (SgenHashTable *hash_table)
 		new_size = g_spaced_primes_closest (hash_table->num_entries);
 	}
 
-	new_hash = sgen_alloc_internal_dynamic (new_size * sizeof (SgenHashTableEntry*), hash_table->table_mem_type);
+	new_hash = sgen_alloc_internal_dynamic (new_size * sizeof (SgenHashTableEntry*), hash_table->table_mem_type, TRUE);
 	for (i = 0; i < old_hash_size; ++i) {
 		for (entry = old_hash [i]; entry; entry = next) {
 			hash = hash_table->hash_func (entry->key) % new_size;
@@ -96,7 +97,7 @@ sgen_hash_table_lookup (SgenHashTable *hash_table, gpointer key)
 }
 
 gboolean
-sgen_hash_table_replace (SgenHashTable *hash_table, gpointer key, gpointer data)
+sgen_hash_table_replace (SgenHashTable *hash_table, gpointer key, gpointer new_value, gpointer old_value)
 {
 	guint hash;
 	SgenHashTableEntry *entry;
@@ -105,13 +106,15 @@ sgen_hash_table_replace (SgenHashTable *hash_table, gpointer key, gpointer data)
 	entry = lookup (hash_table, key, &hash);
 
 	if (entry) {
-		memcpy (entry->data, data, hash_table->data_size);
+		if (old_value)
+			memcpy (old_value, entry->data, hash_table->data_size);	
+		memcpy (entry->data, new_value, hash_table->data_size);
 		return FALSE;
 	}
 
 	entry = sgen_alloc_internal (hash_table->entry_mem_type);
 	entry->key = key;
-	memcpy (entry->data, data, hash_table->data_size);
+	memcpy (entry->data, new_value, hash_table->data_size);
 
 	entry->next = hash_table->table [hash];
 	hash_table->table [hash] = entry;
@@ -122,7 +125,7 @@ sgen_hash_table_replace (SgenHashTable *hash_table, gpointer key, gpointer data)
 }
 
 gboolean
-sgen_hash_table_set_value (SgenHashTable *hash_table, gpointer key, gpointer data)
+sgen_hash_table_set_value (SgenHashTable *hash_table, gpointer key, gpointer new_value, gpointer old_value)
 {
 	guint hash;
 	SgenHashTableEntry *entry;
@@ -130,7 +133,9 @@ sgen_hash_table_set_value (SgenHashTable *hash_table, gpointer key, gpointer dat
 	entry = lookup (hash_table, key, &hash);
 
 	if (entry) {
-		memcpy (entry->data, data, hash_table->data_size);
+		if (old_value)
+			memcpy (old_value, entry->data, hash_table->data_size);
+		memcpy (entry->data, new_value, hash_table->data_size);
 		return TRUE;
 	}
 

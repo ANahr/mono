@@ -29,11 +29,11 @@
 using System;
 using System.Runtime.CompilerServices;
 
-#if !INSIDE_CORLIB && (NET_4_0 || MOONLIGHT || MOBILE)
+#if !INSIDE_CORLIB && NET_4_0
 
 [assembly:TypeForwardedTo (typeof(TimeZoneInfo))]
 
-#elif (INSIDE_CORLIB && (NET_4_0 || MOONLIGHT || MOBILE)) || (!INSIDE_CORLIB && (NET_3_5 && !NET_4_0 && !MOBILE))
+#elif (INSIDE_CORLIB && NET_4_0) || (!INSIDE_CORLIB && (NET_3_5 && !NET_4_0 && !MOBILE))
 
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -49,10 +49,10 @@ using Microsoft.Win32;
 
 namespace System
 {
-#if NET_4_0
-	[TypeForwardedFrom (Consts.AssemblySystemCore_3_5)]
-#elif MOONLIGHT || MOBILE
+#if MOBILE
 	[TypeForwardedFrom (Consts.AssemblySystem_Core)]
+#elif NET_4_0
+	[TypeForwardedFrom (Consts.AssemblySystemCore_3_5)]
 #endif
 	[SerializableAttribute]
 	public sealed partial class TimeZoneInfo : IEquatable<TimeZoneInfo>, ISerializable, IDeserializationCallback
@@ -65,9 +65,9 @@ namespace System
 		string daylightDisplayName;
 		public string DaylightName {
 			get { 
-				if (disableDaylightSavingTime)
-					return String.Empty;
-				return daylightDisplayName; 
+				return supportsDaylightSavingTime
+					? daylightDisplayName
+					: string.Empty;
 			}
 		}
 
@@ -89,7 +89,7 @@ namespace System
 					local = ZoneInfoDB.Default;
 #elif MONOTOUCH
 					using (Stream stream = GetMonoTouchDefault ()) {
-						return BuildFromStream ("Local", stream);
+						local = BuildFromStream ("Local", stream);
 					}
 #elif LIBC
 					try {
@@ -122,9 +122,9 @@ namespace System
 			get { return standardDisplayName; }
 		}
 
-		bool disableDaylightSavingTime;
+		bool supportsDaylightSavingTime;
 		public bool SupportsDaylightSavingTime {
-			get  { return !disableDaylightSavingTime; }
+			get  { return supportsDaylightSavingTime; }
 		}
 
 		static TimeZoneInfo utc;
@@ -136,7 +136,7 @@ namespace System
 			}
 		}
 #if LIBC
-		static string timeZoneDirectory = null;
+		static string timeZoneDirectory;
 		static string TimeZoneDirectory {
 			get {
 				if (timeZoneDirectory == null)
@@ -176,7 +176,7 @@ namespace System
 			return str.Substring (Istart, Iend-Istart+1);
 		}
 		
-		static RegistryKey timeZoneKey = null;
+		static RegistryKey timeZoneKey;
 		static RegistryKey TimeZoneKey {
 			get {
 				if (timeZoneKey != null)
@@ -190,7 +190,7 @@ namespace System
 			}
 		}
 		
-		static RegistryKey localZoneKey = null;
+		static RegistryKey localZoneKey;
 		static RegistryKey LocalZoneKey {
 			get {
 				if (localZoneKey != null)
@@ -220,10 +220,10 @@ namespace System
 		public static DateTime ConvertTime (DateTime dateTime, TimeZoneInfo sourceTimeZone, TimeZoneInfo destinationTimeZone)
 		{
 			if (dateTime.Kind == DateTimeKind.Local && sourceTimeZone != TimeZoneInfo.Local)
-				throw new ArgumentException ("Kind propery of dateTime is Local but the sourceTimeZone does not equal TimeZoneInfo.Local");
+				throw new ArgumentException ("Kind property of dateTime is Local but the sourceTimeZone does not equal TimeZoneInfo.Local");
 
 			if (dateTime.Kind == DateTimeKind.Utc && sourceTimeZone != TimeZoneInfo.Utc)
-				throw new ArgumentException ("Kind propery of dateTime is Utc but the sourceTimeZone does not equal TimeZoneInfo.Utc");
+				throw new ArgumentException ("Kind property of dateTime is Utc but the sourceTimeZone does not equal TimeZoneInfo.Utc");
 
 			if (sourceTimeZone.IsInvalidTime (dateTime))
 				throw new ArgumentException ("dateTime parameter is an invalid time");
@@ -246,9 +246,21 @@ namespace System
 
 		}
 
-		public static DateTimeOffset ConvertTime (DateTimeOffset dateTimeOffset, TimeZoneInfo destinationTimeZone)
+		public static DateTimeOffset ConvertTime(DateTimeOffset dateTimeOffset, TimeZoneInfo destinationTimeZone) 
 		{
-			throw new NotImplementedException ();
+			if (destinationTimeZone == null) 
+				throw new ArgumentNullException("destinationTimeZone");
+		
+			var utcDateTime = dateTimeOffset.UtcDateTime;
+			AdjustmentRule rule = destinationTimeZone.GetApplicableRule (utcDateTime);
+		
+			if (rule != null && destinationTimeZone.IsDaylightSavingTime(utcDateTime)) {
+				var offset = destinationTimeZone.BaseUtcOffset + rule.DaylightDelta;
+				return new DateTimeOffset(DateTime.SpecifyKind(utcDateTime, DateTimeKind.Unspecified) + offset, offset);
+			}
+			else {
+				return new DateTimeOffset(DateTime.SpecifyKind(utcDateTime, DateTimeKind.Unspecified) + destinationTimeZone.BaseUtcOffset, destinationTimeZone.BaseUtcOffset);
+			}
 		}
 
 		public static DateTime ConvertTimeBySystemTimeZoneId (DateTime dateTime, string destinationTimeZoneId)
@@ -309,10 +321,10 @@ namespace System
 				throw new ArgumentNullException ("sourceTimeZone");
 
 			if (dateTime.Kind == DateTimeKind.Utc && sourceTimeZone != TimeZoneInfo.Utc)
-				throw new ArgumentException ("Kind propery of dateTime is Utc but the sourceTimeZone does not equal TimeZoneInfo.Utc");
+				throw new ArgumentException ("Kind property of dateTime is Utc but the sourceTimeZone does not equal TimeZoneInfo.Utc");
 
 			if (dateTime.Kind == DateTimeKind.Local && sourceTimeZone != TimeZoneInfo.Local)
-				throw new ArgumentException ("Kind propery of dateTime is Local but the sourceTimeZone does not equal TimeZoneInfo.Local");
+				throw new ArgumentException ("Kind property of dateTime is Local but the sourceTimeZone does not equal TimeZoneInfo.Local");
 
 			if (sourceTimeZone.IsInvalidTime (dateTime))
 				throw new ArgumentException ("dateTime parameter is an invalid time");
@@ -352,6 +364,13 @@ namespace System
 			return new TimeZoneInfo (id, baseUtcOffset, displayName, standardDisplayName, daylightDisplayName, adjustmentRules, disableDaylightSavingTime);
 		}
 
+#if NET_4_5
+		public override bool Equals (object obj)
+		{
+			return Equals (obj as TimeZoneInfo);
+		}
+#endif
+
 		public bool Equals (TimeZoneInfo other)
 		{
 			if (other == null)
@@ -375,7 +394,10 @@ namespace System
 			}
 #endif
 #if MONODROID
-			return ZoneInfoDB.GetTimeZone (id);
+			var timeZoneInfo = ZoneInfoDB.GetTimeZone (id);
+			if (timeZoneInfo == null)
+				throw new TimeZoneNotFoundException ();
+			return timeZoneInfo;
 #else
 			// Local requires special logic that already exists in the Local property (bug #326)
 			if (id == "Local")
@@ -536,7 +558,7 @@ namespace System
 
 		public AdjustmentRule [] GetAdjustmentRules ()
 		{
-			if (disableDaylightSavingTime)
+			if (!supportsDaylightSavingTime)
 				return new AdjustmentRule [0];
 			else
 				return (AdjustmentRule []) adjustmentRules.Clone ();
@@ -580,7 +602,7 @@ namespace System
 		}
 
 		//FIXME: change this to a generic Dictionary and allow caching for FindSystemTimeZoneById
-		private static List<TimeZoneInfo> systemTimeZones = null;
+		private static List<TimeZoneInfo> systemTimeZones;
 		public static ReadOnlyCollection<TimeZoneInfo> GetSystemTimeZones ()
 		{
 			if (systemTimeZones == null) {
@@ -598,7 +620,9 @@ namespace System
 #endif
 #if MONODROID
 			foreach (string id in ZoneInfoDB.GetAvailableIds ()) {
-				systemTimeZones.Add (ZoneInfoDB.GetTimeZone (id));
+				var tz = ZoneInfoDB.GetTimeZone (id);
+				if (tz != null)
+					systemTimeZones.Add (tz);
 			}
 #elif MONOTOUCH
 				if (systemTimeZones.Count == 0) {
@@ -794,6 +818,8 @@ namespace System
 				throw new ArgumentException ("id parameter shouldn't be longer than 32 characters");
 #endif
 
+			bool supportsDaylightSavingTime = !disableDaylightSavingTime;
+
 			if (adjustmentRules != null && adjustmentRules.Length != 0) {
 				AdjustmentRule prev = null;
 				foreach (AdjustmentRule current in adjustmentRules) {
@@ -815,6 +841,8 @@ namespace System
 
 					prev = current;
 				}
+			} else {
+				supportsDaylightSavingTime = false;
 			}
 			
 			this.id = id;
@@ -822,7 +850,7 @@ namespace System
 			this.displayName = displayName ?? id;
 			this.standardDisplayName = standardDisplayName ?? id;
 			this.daylightDisplayName = daylightDisplayName;
-			this.disableDaylightSavingTime = disableDaylightSavingTime;
+			this.supportsDaylightSavingTime = supportsDaylightSavingTime;
 			this.adjustmentRules = adjustmentRules;
 		}
 

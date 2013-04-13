@@ -222,6 +222,8 @@ namespace System.IO {
 
 				if (l >= 2 && DirectorySeparatorChar == '\\' && ret [l - 1] == VolumeSeparatorChar)
 					return ret + DirectorySeparatorChar;
+				else if (l == 1 && DirectorySeparatorChar == '\\' && path.Length >= 2 && path [nLast] == VolumeSeparatorChar)
+					return ret + VolumeSeparatorChar;
 				else {
 					//
 					// Important: do not use CanonicalizePath here, use
@@ -295,7 +297,7 @@ namespace System.IO {
 			if ((path [1] != ':') || !Char.IsLetter (path [0]))
 				return path;
 
-			string current = Directory.GetCurrentDirectory ();
+			string current = Directory.InsecureGetCurrentDirectory ();
 			// first, only the drive is specified
 			if (path.Length == 2) {
 				// then if the current directory is on the same drive
@@ -357,17 +359,17 @@ namespace System.IO {
 						}
 						canonicalize = start > 0;
 					}
-					
-					path = Directory.GetCurrentDirectory () + DirectorySeparatorStr + path;
+
+					path = Directory.InsecureGetCurrentDirectory() + DirectorySeparatorStr + path;
 				} else if (DirectorySeparatorChar == '\\' &&
 					path.Length >= 2 &&
 					IsDsc (path [0]) &&
 					!IsDsc (path [1])) { // like `\abc\def'
-					string current = Directory.GetCurrentDirectory ();
+					string current = Directory.InsecureGetCurrentDirectory();
 					if (current [1] == VolumeSeparatorChar)
 						path = current.Substring (0, 2) + path;
 					else
-						path = current.Substring (0, current.IndexOf ('\\', current.IndexOf ("\\\\") + 1));
+						path = current.Substring (0, current.IndexOf ('\\', current.IndexOfOrdinalUnchecked ("\\\\") + 1));
 				}
 			}
 			
@@ -741,7 +743,7 @@ namespace System.IO {
 			return String.Compare (subset, slast, path, slast, subset.Length - slast) == 0;
 		}
 
-#if NET_4_0 || MOONLIGHT || MOBILE
+#if NET_4_0
 		public
 #else
                 internal
@@ -781,7 +783,7 @@ namespace System.IO {
 			return ret.ToString ();
 		}
 
-#if NET_4_0 || MOONLIGHT || MOBILE
+#if NET_4_0
 		public
 #else
                 internal
@@ -800,7 +802,7 @@ namespace System.IO {
 			return Combine (new string [] { path1, path2, path3 });
 		}
 
-#if NET_4_0 || MOONLIGHT || MOBILE
+#if NET_4_0
 		public
 #else
                 internal
@@ -840,11 +842,6 @@ namespace System.IO {
 				if (idx >= 0 && idx != 1)
 					throw new ArgumentException (parameterName);
 			}
-#if MOONLIGHT
-			// On Moonlight (SL4+) there are some limitations in "Elevated Trust"
-			if (SecurityManager.HasElevatedPermissions) {
-			}
-#endif
 		}
 	}
 }

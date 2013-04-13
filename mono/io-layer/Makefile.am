@@ -1,7 +1,7 @@
 
 noinst_LTLIBRARIES = libwapi.la
 
-INCLUDES = \
+AM_CPPFLAGS = \
 	$(GLIB_CFLAGS)		\
 	$(LIBGC_CPPFLAGS)	\
 	-DMONO_BINDIR=\""$(bindir)"\"	\
@@ -11,7 +11,6 @@ libwapiincludedir = $(includedir)/mono-$(API_VER)/mono/io-layer
 
 OTHER_H = \
 	access.h	\
-	atomic.h	\
 	collection.h	\
 	context.h	\
 	critical-sections.h	\
@@ -41,8 +40,6 @@ OTHER_H = \
 
 OTHER_SRC = \
 	access.h		\
-	atomic.c		\
-	atomic.h		\
 	collection.c		\
 	collection.h		\
 	context.c		\
@@ -118,27 +115,17 @@ WINDOWS_SRC = \
 	io-layer.h		\
 	io-layer-dummy.c
 
-HPPA_SRC = \
-	hppa_atomic.S
-
 if HOST_WIN32
 libwapi_la_SOURCES = $(WINDOWS_SRC) $(WINDOWS_H)
 else
-if HPPA
-libwapi_la_SOURCES = $(OTHER_SRC) $(HPPA_SRC)
-# to enable pick up of config.h
-libwapi_la_CCASFLAGS = -I$(top_builddir)
-else
 libwapi_la_SOURCES = $(OTHER_SRC) $(OTHER_H)
-endif
 endif
 if PLATFORM_DARWIN
 libwapi_la_LIBADD = -lproc
 endif
 
 EXTRA_DIST =	\
-	$(WINDOWS_SRC)	\
-        $(HPPA_SRC) \
+	$(WINDOWS_SRC)
 	$(OTHER_SRC)
 
 

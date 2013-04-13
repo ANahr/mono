@@ -42,13 +42,15 @@ namespace MonoTests.System.Globalization
 				} catch (ArgumentException) {
 				}
 			}
+
+			try {
+				new RegionInfo ("2342#");
+				Assert.Fail ("#2");
+			} catch (ArgumentException) {
+			}
 		}
 
 		[Test]
-#if NET_2_0
-#else
-		[ExpectedException (typeof (ArgumentException))]
-#endif
 		public void RegionByLocaleName ()
 		{
 			string [] names = new string [] {
@@ -56,6 +58,12 @@ namespace MonoTests.System.Globalization
 
 			foreach (string name in names)
 				new RegionInfo (name);
+		}
+		
+		[Test]
+		public void CurrentRegion ()
+		{
+			Assert.IsNotNull (RegionInfo.CurrentRegion, "CurrentRegion");
 		}
 		
 		[Test]
@@ -72,6 +80,14 @@ namespace MonoTests.System.Globalization
 			// the bug messed the order leading to DisplayName used for TLA (mono returns String.Empty)
 			Assert.IsTrue (hk.ThreeLetterISORegionName.Length <= 3, "ThreeLetterISORegionName");
 			Assert.IsTrue (hk.ThreeLetterWindowsRegionName.Length <= 3, "ThreeLetterWindowsRegionName");
+		}
+
+		[Test]
+		public void Equals ()
+		{
+			var a = new RegionInfo (0x414);
+			var b = new RegionInfo (0x43B);
+			Assert.AreEqual (a, b);
 		}
 	}
 }

@@ -144,6 +144,12 @@ namespace Mono.CSharp {
 			}
 		}
 
+		public bool ResolveError {
+			get {
+				return resolve_error;
+			}
+		}
+
 		public ATypeNameExpression TypeExpression {
 			get {
 				return expression;
@@ -167,7 +173,7 @@ namespace Mono.CSharp {
 			if (NamedArguments == null)
 				named_args = new Arguments (1);
 
-			var value = Constant.CreateConstant (rc.Module.PredefinedTypes.CharSet.TypeSpec, rc.Module.DefaultCharSet, Location);
+			var value = Constant.CreateConstantFromValue (rc.Module.PredefinedTypes.CharSet.TypeSpec, rc.Module.DefaultCharSet, Location);
 			NamedArguments.Add (new NamedArgument (dll_import_char_set, loc, value));
 		}
 
@@ -259,7 +265,7 @@ namespace Mono.CSharp {
 		public void Error_AttributeEmitError (string inner)
 		{
 			Report.Error (647, Location, "Error during emitting `{0}' attribute. The reason is `{1}'",
-				      TypeManager.CSharpName (Type), inner);
+				      Type.GetSignatureForError (), inner);
 		}
 
 		public void Error_InvalidSecurityParent ()
@@ -276,7 +282,7 @@ namespace Mono.CSharp {
 		/// <summary>
 		///   Tries to resolve the type of the attribute. Flags an error if it can't, and complain is true.
 		/// </summary>
-		void ResolveAttributeType ()
+		void ResolveAttributeType (bool comparisonOnly)
 		{
 			SessionReportPrinter resolve_printer = new SessionReportPrinter ();
 			ReportPrinter prev_recorder = Report.SetPrinter (resolve_printer);
@@ -311,9 +317,12 @@ namespace Mono.CSharp {
 			}
 
 			if (t1_is_attr && t2_is_attr && t1 != t2) {
-				Report.Error (1614, Location, "`{0}' is ambiguous between `{1}' and `{2}'. Use either `@{0}' or `{0}Attribute'",
-					GetSignatureForError (), expression.GetSignatureForError (), expanded.GetSignatureForError ());
-				resolve_error = true;
+				if (!comparisonOnly) {
+					Report.Error (1614, Location, "`{0}' is ambiguous between `{1}' and `{2}'. Use either `@{0}' or `{0}Attribute'",
+						GetSignatureForError (), expression.GetSignatureForError (), expanded.GetSignatureForError ());
+					resolve_error = true;
+				}
+
 				return;
 			}
 
@@ -326,6 +335,9 @@ namespace Mono.CSharp {
 				Type = t2;
 				return;
 			}
+
+			if (comparisonOnly)
+				return;
 
 			resolve_error = true;
 
@@ -346,17 +358,17 @@ namespace Mono.CSharp {
 			resolve_printer.Merge (prev_recorder);
 		}
 
-		public TypeSpec ResolveType ()
+		public TypeSpec ResolveTypeForComparison ()
 		{
 			if (Type == null && !resolve_error)
-				ResolveAttributeType ();
+				ResolveAttributeType (true);
 			return Type;
 		}
 
 		public string GetSignatureForError ()
 		{
 			if (Type != null)
-				return TypeManager.CSharpName (Type);
+				return Type.GetSignatureForError ();
 
 			return expression.GetSignatureForError ();
 		}
@@ -425,7 +437,7 @@ namespace Mono.CSharp {
 			arg_resolved = true;
 
 			if (Type == null) {
-				ResolveAttributeType ();
+				ResolveAttributeType (false);
 				if (Type == null)
 					return null;
 			}
@@ -437,7 +449,7 @@ namespace Mono.CSharp {
 
 			ObsoleteAttribute obsolete_attr = Type.GetAttributeObsolete ();
 			if (obsolete_attr != null) {
-				AttributeTester.Report_ObsoleteMessage (obsolete_attr, TypeManager.CSharpName (Type), Location, Report);
+				AttributeTester.Report_ObsoleteMessage (obsolete_attr, Type.GetSignatureForError (), Location, Report);
 			}
 
 			ResolveContext rc = null;
@@ -1011,7 +1023,7 @@ namespace Mono.CSharp {
 								if (pos_args.Count == 1 && pos_args[0].Expr is Constant) {
 									var value = ((Constant) pos_args[0].Expr).GetValue () as string;
 									if (string.IsNullOrEmpty (value))
-										Error_AttributeEmitError ("DllName cannot be empty");
+										Error_AttributeEmitError ("DllName cannot be empty or null");
 								}
 							} else if (Type == predefined.MethodImpl && pt.BuiltinType == BuiltinTypeSpec.Type.Short &&
 								!System.Enum.IsDefined (typeof (MethodImplOptions), ((Constant) arg_expr).GetValue ().ToString ())) {
@@ -1043,15 +1055,17 @@ namespace Mono.CSharp {
 				cdata = encoder.ToArray ();
 			}
 
-			try {
-				foreach (Attributable target in targets)
-					target.ApplyAttributeBuilder (this, ctor, cdata, predefined);
-			} catch (Exception e) {
-				if (e is BadImageFormat && Report.Errors > 0)
-					return;
+			if (!ctor.DeclaringType.IsConditionallyExcluded (context, Location)) {
+				try {
+					foreach (Attributable target in targets)
+						target.ApplyAttributeBuilder (this, ctor, cdata, predefined);
+				} catch (Exception e) {
+					if (e is BadImageFormat && Report.Errors > 0)
+						return;
 
-				Error_AttributeEmitError (e.Message);
-				return;
+					Error_AttributeEmitError (e.Message);
+					return;
+				}
 			}
 
 			if (!usage_attr.AllowMultiple && allEmitted != null) {
@@ -1193,6 +1207,16 @@ namespace Mono.CSharp {
 			}
 		}
 
+		public bool HasResolveError()
+		{
+			foreach (var a in Attrs) {
+				if (a.ResolveError)
+					return true;
+			}
+
+			return false;
+		}
+
 		public Attribute Search (PredefinedAttribute t)
 		{
 			return Search (null, t);
@@ -1204,7 +1228,7 @@ namespace Mono.CSharp {
 				if (explicitTarget != null && a.ExplicitTarget != explicitTarget)
 					continue;
 
-				if (a.ResolveType () == t)
+				if (a.ResolveTypeForComparison () == t)
 					return a;
 			}
 			return null;
@@ -1218,7 +1242,7 @@ namespace Mono.CSharp {
 			List<Attribute> ar = null;
 
 			foreach (Attribute a in Attrs) {
-				if (a.ResolveType () == t) {
+				if (a.ResolveTypeForComparison () == t) {
 					if (ar == null)
 						ar = new List<Attribute> (Attrs.Count);
 					ar.Add (a);
@@ -1457,6 +1481,12 @@ namespace Mono.CSharp {
 			Encode (type.MemberDefinition.IsImported ? old_type.AssemblyQualifiedName : old_type.FullName);
 		}
 
+		public void EncodeTypeName (TypeContainer type)
+		{
+			Encode (type.GetSignatureForMetadata ());
+		}
+
+
 		//
 		// Encodes single property named argument per call
 		//
@@ -1610,6 +1640,9 @@ namespace Mono.CSharp {
 		// New in .NET 4.0
 		public readonly PredefinedDynamicAttribute Dynamic;
 
+		// New in .NET 4.5
+		public readonly PredefinedStateMachineAttribute AsyncStateMachine;
+
 		//
 		// Optional types which are used as types and for member lookup
 		//
@@ -1670,6 +1703,8 @@ namespace Mono.CSharp {
 			DecimalConstant = new PredefinedDecimalAttribute (module, "System.Runtime.CompilerServices", "DecimalConstantAttribute");
 			StructLayout = new PredefinedAttribute (module, "System.Runtime.InteropServices", "StructLayoutAttribute");
 			FieldOffset = new PredefinedAttribute (module, "System.Runtime.InteropServices", "FieldOffsetAttribute");
+
+			AsyncStateMachine = new PredefinedStateMachineAttribute (module, "System.Runtime.CompilerServices", "AsyncStateMachineAttribute");
 
 			CallerMemberNameAttribute = new PredefinedAttribute (module, "System.Runtime.CompilerServices", "CallerMemberNameAttribute");
 			CallerLineNumberAttribute = new PredefinedAttribute (module, "System.Runtime.CompilerServices", "CallerLineNumberAttribute");
@@ -1852,6 +1887,30 @@ namespace Mono.CSharp {
 			encoder.Encode ((uint) bits[2]);
 			encoder.Encode ((uint) bits[1]);
 			encoder.Encode ((uint) bits[0]);
+			encoder.EncodeEmptyNamedArguments ();
+
+			builder.SetCustomAttribute ((ConstructorInfo) ctor.GetMetaInfo (), encoder.ToArray ());
+		}
+	}
+
+	public class PredefinedStateMachineAttribute : PredefinedAttribute
+	{
+		public PredefinedStateMachineAttribute (ModuleContainer module, string ns, string name)
+			: base (module, ns, name)
+		{
+		}
+
+		public void EmitAttribute (MethodBuilder builder, StateMachine type)
+		{
+			var predefined_ctor = module.PredefinedMembers.AsyncStateMachineAttributeCtor;
+
+			var ctor = predefined_ctor.Get ();
+
+			if (ctor == null)
+				return;
+
+			AttributeEncoder encoder = new AttributeEncoder ();
+			encoder.EncodeTypeName (type);
 			encoder.EncodeEmptyNamedArguments ();
 
 			builder.SetCustomAttribute ((ConstructorInfo) ctor.GetMetaInfo (), encoder.ToArray ());

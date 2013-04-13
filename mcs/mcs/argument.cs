@@ -47,9 +47,6 @@ namespace Mono.CSharp
 
 		public Argument (Expression expr)
 		{
-			if (expr == null)
-				throw new ArgumentNullException ();
-
 			this.Expr = expr;
 		}
 
@@ -135,7 +132,7 @@ namespace Mono.CSharp
 			if (Expr.eclass == ExprClass.MethodGroup)
 				return Expr.ExprClassName;
 
-			return TypeManager.CSharpName (Expr.Type);
+			return Expr.Type.GetSignatureForError ();
 		}
 
 		public bool ResolveMethodGroup (ResolveContext ec)
@@ -320,20 +317,20 @@ namespace Mono.CSharp
 
 				if (a.Expr is Constant) {
 					info_flags = new Binary (Binary.Operator.BitwiseOr, info_flags,
-						new MemberAccess (new MemberAccess (binder, info_flags_enum, loc), "Constant", loc), loc);
+						new MemberAccess (new MemberAccess (binder, info_flags_enum, loc), "Constant", loc));
 				} else if (a.ArgType == Argument.AType.Ref) {
 					info_flags = new Binary (Binary.Operator.BitwiseOr, info_flags,
-						new MemberAccess (new MemberAccess (binder, info_flags_enum, loc), "IsRef", loc), loc);
+						new MemberAccess (new MemberAccess (binder, info_flags_enum, loc), "IsRef", loc));
 					info_flags = new Binary (Binary.Operator.BitwiseOr, info_flags,
-						new MemberAccess (new MemberAccess (binder, info_flags_enum, loc), "UseCompileTimeType", loc), loc);
+						new MemberAccess (new MemberAccess (binder, info_flags_enum, loc), "UseCompileTimeType", loc));
 				} else if (a.ArgType == Argument.AType.Out) {
 					info_flags = new Binary (Binary.Operator.BitwiseOr, info_flags,
-						new MemberAccess (new MemberAccess (binder, info_flags_enum, loc), "IsOut", loc), loc);
+						new MemberAccess (new MemberAccess (binder, info_flags_enum, loc), "IsOut", loc));
 					info_flags = new Binary (Binary.Operator.BitwiseOr, info_flags,
-						new MemberAccess (new MemberAccess (binder, info_flags_enum, loc), "UseCompileTimeType", loc), loc);
+						new MemberAccess (new MemberAccess (binder, info_flags_enum, loc), "UseCompileTimeType", loc));
 				} else if (a.ArgType == Argument.AType.DynamicTypeName) {
 					info_flags = new Binary (Binary.Operator.BitwiseOr, info_flags,
-						new MemberAccess (new MemberAccess (binder, info_flags_enum, loc), "IsStaticType", loc), loc);
+						new MemberAccess (new MemberAccess (binder, info_flags_enum, loc), "IsStaticType", loc));
 				}
 
 				var arg_type = a.Expr.Type;
@@ -350,18 +347,18 @@ namespace Mono.CSharp
 					} else if (arg_type.Kind == MemberKind.Void || arg_type == InternalType.Arglist || arg_type.IsPointer) {
 						rc.Report.Error (1978, a.Expr.Location,
 							"An expression of type `{0}' cannot be used as an argument of dynamic operation",
-							TypeManager.CSharpName (arg_type));
+							arg_type.GetSignatureForError ());
 					}
 
 					info_flags = new Binary (Binary.Operator.BitwiseOr, info_flags,
-						new MemberAccess (new MemberAccess (binder, info_flags_enum, loc), "UseCompileTimeType", loc), loc);
+						new MemberAccess (new MemberAccess (binder, info_flags_enum, loc), "UseCompileTimeType", loc));
 				}
 
 				string named_value;
 				NamedArgument na = a as NamedArgument;
 				if (na != null) {
 					info_flags = new Binary (Binary.Operator.BitwiseOr, info_flags,
-						new MemberAccess (new MemberAccess (binder, info_flags_enum, loc), "NamedArgument", loc), loc);
+						new MemberAccess (new MemberAccess (binder, info_flags_enum, loc), "NamedArgument", loc));
 
 					named_value = na.Name;
 				} else {

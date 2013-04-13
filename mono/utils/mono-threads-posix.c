@@ -84,12 +84,24 @@ static void
 suspend_signal_handler (int _dummy, siginfo_t *info, void *context)
 {
 	MonoThreadInfo *current = mono_thread_info_current ();
-	gboolean ret = mono_threads_get_runtime_callbacks ()->thread_state_init_from_sigctx (&current->suspend_state, context);
+	gboolean ret;
+	
+	if (current->syscall_break_signal) {
+		current->syscall_break_signal = FALSE;
+		return;
+	}
 
-	g_assert (ret);
+	ret = mono_threads_get_runtime_callbacks ()->thread_state_init_from_sigctx (&current->suspend_state, context);
+
+	/* thread_state_init_from_sigctx return FALSE if the current thread is detaching and suspend can't continue. */
+	current->suspend_can_continue = ret;
 
 	MONO_SEM_POST (&current->suspend_semaphore);
-		
+
+	/* This thread is doomed, all we can do is give up and let the suspender recover. */
+	if (!ret)
+		return;
+
 	while (MONO_SEM_WAIT (&current->resume_semaphore) != 0) {
 		/*if (EINTR != errno) ABORT("sem_wait failed"); */
 	}
@@ -157,10 +169,30 @@ mono_threads_pthread_kill (MonoThreadInfo *info, int signum)
 		errno = old_errno;
 	}
 	return result;
+#elif defined(__native_client__)
+	/* Workaround pthread_kill abort() in NaCl glibc. */
+	return 0;
 #else
 	return pthread_kill (mono_thread_info_get_tid (info), signum);
 #endif
 
+}
+
+void
+mono_threads_core_abort_syscall (MonoThreadInfo *info)
+{
+	/*
+	We signal a thread to break it from the urrent syscall.
+	This signal should not be interpreted as a suspend request.
+	*/
+	info->syscall_break_signal = TRUE;
+	mono_threads_pthread_kill (info, mono_thread_get_abort_signal ());
+}
+
+gboolean
+mono_threads_core_needs_abort_syscall (void)
+{
+	return TRUE;
 }
 
 gboolean
@@ -171,7 +203,7 @@ mono_threads_core_suspend (MonoThreadInfo *info)
 	while (MONO_SEM_WAIT (&info->suspend_semaphore) != 0) {
 		/* g_assert (errno == EINTR); */
 	}
-	return TRUE;
+	return info->suspend_can_continue;
 }
 
 gboolean

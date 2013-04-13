@@ -108,6 +108,8 @@ typedef struct {
 	/* only needed by the posix backend */ 
 #if (defined(_POSIX_VERSION) || defined(__native_client__)) && !defined (__MACH__)
 	MonoSemType suspend_semaphore;
+	gboolean syscall_break_signal;
+	gboolean suspend_can_continue;
 #endif
 
 	/*In theory, only the posix backend needs this, but having it on mach/win32 simplifies things a lot.*/
@@ -141,13 +143,13 @@ typedef struct {
 /*
 Requires the world to be stoped
 */
-#define FOREACH_THREAD(thread) MONO_LLS_FOREACH (mono_thread_info_list_head (), thread)
+#define FOREACH_THREAD(thread) MONO_LLS_FOREACH (mono_thread_info_list_head (), thread, SgenThreadInfo*)
 #define END_FOREACH_THREAD MONO_LLS_END_FOREACH
 
 /*
 Snapshot iteration.
 */
-#define FOREACH_THREAD_SAFE(thread) MONO_LLS_FOREACH_SAFE (mono_thread_info_list_head (), thread)
+#define FOREACH_THREAD_SAFE(thread) MONO_LLS_FOREACH_SAFE (mono_thread_info_list_head (), thread, SgenThreadInfo*)
 #define END_FOREACH_THREAD_SAFE MONO_LLS_END_FOREACH_SAFE
 
 #define mono_thread_info_get_tid(info) ((MonoNativeThreadId)((MonoThreadInfo*)info)->node.key)
@@ -217,6 +219,8 @@ mono_threads_unregister_current_thread (THREAD_INFO_TYPE *info) MONO_INTERNAL;
 void
 mono_thread_info_disable_new_interrupt (gboolean disable) MONO_INTERNAL;
 
+void
+mono_thread_info_abort_socket_syscall_for_close (MonoNativeThreadId tid) MONO_INTERNAL;
 
 #if !defined(HOST_WIN32)
 
@@ -229,6 +233,12 @@ int
 mono_threads_pthread_kill (THREAD_INFO_TYPE *info, int signum) MONO_INTERNAL;
 #endif
 
+#else  /* !defined(HOST_WIN32) */
+
+HANDLE
+	mono_threads_CreateThread (LPSECURITY_ATTRIBUTES attributes, SIZE_T stack_size, LPTHREAD_START_ROUTINE start_routine, LPVOID arg, DWORD creation_flags, LPDWORD thread_id);
+
+
 #endif /* !defined(HOST_WIN32) */
 
 /* Plartform specific functions DON'T use them */
@@ -238,6 +248,8 @@ gboolean mono_threads_core_resume (MonoThreadInfo *info) MONO_INTERNAL;
 void mono_threads_platform_register (MonoThreadInfo *info) MONO_INTERNAL; //ok
 void mono_threads_platform_free (MonoThreadInfo *info) MONO_INTERNAL;
 void mono_threads_core_interrupt (MonoThreadInfo *info) MONO_INTERNAL;
+void mono_threads_core_abort_syscall (MonoThreadInfo *info) MONO_INTERNAL;
+gboolean mono_threads_core_needs_abort_syscall (void) MONO_INTERNAL;
 
 MonoNativeThreadId mono_native_thread_id_get (void) MONO_INTERNAL;
 

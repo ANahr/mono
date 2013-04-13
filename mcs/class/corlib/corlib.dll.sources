@@ -79,6 +79,7 @@ Mono.Xml/SecurityParser.cs
 System/AccessViolationException.cs
 System/ActivationContext.cs
 System/Activator.cs
+System/AndroidPlatform.cs
 System/AppDomain.cs
 System/AppDomainInitializer.cs
 System/AppDomainManager.cs
@@ -142,6 +143,7 @@ System/DllNotFoundException.cs
 System/DomainManagerInitializationFlags.cs
 System/Double.cs
 System/DuplicateWaitObjectException.cs
+System/EmptyArray.cs
 System/EntryPointNotFoundException.cs
 System/Enum.cs
 System/Environment.cs
@@ -282,6 +284,7 @@ System/Variant.cs
 System/Version.cs
 System/Void.cs
 System/WeakReference.cs
+System/WeakReference_T.cs
 System/WindowsConsoleDriver.cs
 System/_AppDomain.cs
 System/__ComObject.cs
@@ -295,6 +298,7 @@ System.Collections/CollectionDebuggerView.cs
 System.Collections/DictionaryBase.cs
 System.Collections/DictionaryEntry.cs
 System.Collections/Hashtable.cs
+System.Collections/HashPrimeNumbers.cs
 System.Collections/ICollection.cs
 System.Collections/IComparer.cs
 System.Collections/IDictionary.cs
@@ -341,6 +345,7 @@ System.Diagnostics.Contracts/ContractException.cs
 System.Diagnostics.Contracts/ContractFailedEventArgs.cs
 System.Diagnostics.Contracts/ContractFailureKind.cs
 System.Diagnostics.Contracts/ContractInvariantMethodAttribute.cs
+System.Diagnostics.Contracts/ContractOptionAttribute.cs
 System.Diagnostics.Contracts/ContractPublicPropertyNameAttribute.cs
 System.Diagnostics.Contracts/ContractReferenceAssemblyAttribute.cs
 System.Diagnostics.Contracts/ContractRuntimeIgnoredAttribute.cs
@@ -450,9 +455,6 @@ System.IO/UnexceptionalStreamWriter.cs
 System.IO/UnmanagedMemoryAccessor.cs
 System.IO/UnmanagedMemoryStream.cs
 System.IO.IsolatedStorage/INormalizeForIsolatedStorage.cs
-System.IO.IsolatedStorage/MoonIsolatedStorage.cs
-System.IO.IsolatedStorage/MoonIsolatedStorageFile.cs
-System.IO.IsolatedStorage/MoonIsolatedStorageFileStream.cs
 System.IO.IsolatedStorage/IsolatedStorage.cs
 System.IO.IsolatedStorage/IsolatedStorageException.cs
 System.IO.IsolatedStorage/IsolatedStorageFile.cs
@@ -466,6 +468,7 @@ System.Reflection/Assembly.cs
 System.Reflection/AssemblyAlgorithmIdAttribute.cs
 System.Reflection/AssemblyCompanyAttribute.cs
 System.Reflection/AssemblyConfigurationAttribute.cs
+System.Reflection/AssemblyContentType.cs
 System.Reflection/AssemblyCopyrightAttribute.cs
 System.Reflection/AssemblyCultureAttribute.cs
 System.Reflection/AssemblyDefaultAliasAttribute.cs
@@ -476,10 +479,12 @@ System.Reflection/AssemblyFlagsAttribute.cs
 System.Reflection/AssemblyInformationalVersionAttribute.cs
 System.Reflection/AssemblyKeyFileAttribute.cs
 System.Reflection/AssemblyKeyNameAttribute.cs
+System.Reflection/AssemblyMetadataAttribute.cs
 System.Reflection/AssemblyName.cs
 System.Reflection/AssemblyNameFlags.cs
 System.Reflection/AssemblyNameProxy.cs
 System.Reflection/AssemblyProductAttribute.cs
+System.Reflection/AssemblySignatureKeyAttribute.cs
 System.Reflection/AssemblyTitleAttribute.cs
 System.Reflection/AssemblyTradeMarkAttribute.cs
 System.Reflection/AssemblyVersionAttribute.cs
@@ -488,6 +493,7 @@ System.Reflection/BindingFlags.cs
 System.Reflection/CallingConventions.cs
 System.Reflection/ConstructorInfo.cs
 System.Reflection/CustomAttributeData.cs
+System.Reflection/CustomAttributeExtensions.cs
 System.Reflection/CustomAttributeFormatException.cs
 System.Reflection/CustomAttributeNamedArgument.cs
 System.Reflection/CustomAttributeTypedArgument.cs
@@ -542,6 +548,7 @@ System.Reflection/ReflectionContext.cs
 System.Reflection/ReflectionTypeLoadException.cs
 System.Reflection/ResourceAttributes.cs
 System.Reflection/ResourceLocation.cs
+System.Reflection/RuntimeReflectionExtensions.cs
 System.Reflection/StrongNameKeyPair.cs
 System.Reflection/TargetException.cs
 System.Reflection/TargetInvocationException.cs
@@ -614,6 +621,7 @@ System.Runtime/GCSettings.cs
 System.Runtime/MemoryFailPoint.cs
 System.Runtime/TargetedPatchingOptOutAttribute.cs
 System.Runtime.CompilerServices/AccessedThroughPropertyAttribute.cs
+System.Runtime.CompilerServices/AsyncStateMachineAttribute.cs
 System.Runtime.CompilerServices/AsyncVoidMethodBuilder.cs
 System.Runtime.CompilerServices/AsyncTaskMethodBuilder.cs
 System.Runtime.CompilerServices/AsyncTaskMethodBuilder_T.cs
@@ -663,6 +671,7 @@ System.Runtime.CompilerServices/IsPinned.cs
 System.Runtime.CompilerServices/IsSignUnspecifiedByte.cs
 System.Runtime.CompilerServices/IsUdtReturn.cs
 System.Runtime.CompilerServices/IsVolatile.cs
+System.Runtime.CompilerServices/IteratorStateMachineAttribute.cs
 System.Runtime.CompilerServices/LoadHint.cs
 System.Runtime.CompilerServices/MethodCodeType.cs
 System.Runtime.CompilerServices/MethodImplAttribute.cs
@@ -675,6 +684,7 @@ System.Runtime.CompilerServices/RuntimeWrappedException.cs
 System.Runtime.CompilerServices/SpecialNameAttribute.cs 
 System.Runtime.CompilerServices/ScopelessEnumAttribute.cs
 System.Runtime.CompilerServices/SuppressIldasmAttribute.cs
+System.Runtime.CompilerServices/StateMachineAttribute.cs
 System.Runtime.CompilerServices/StringFreezingAttribute.cs 
 System.Runtime.CompilerServices/UnsafeValueTypeAttribute.cs
 System.Runtime.CompilerServices/TaskAwaiter.cs
@@ -1172,7 +1182,6 @@ System.Security/SecurityElement.cs
 System.Security/SecurityFrame.cs
 System.Security/SecurityException.cs
 System.Security/SecurityManager.cs
-System.Security/SecurityManager_2_1.cs
 System.Security/SecurityManager_mobile.cs
 System.Security/SecurityRuleSet.cs
 System.Security/SecurityRulesAttribute.cs
@@ -1190,12 +1199,14 @@ System.Security.AccessControl/AccessControlModification.cs
 System.Security.AccessControl/AccessControlSections.cs
 System.Security.AccessControl/AccessControlType.cs
 System.Security.AccessControl/AccessRule.cs
+System.Security.AccessControl/AccessRule_T.cs
 System.Security.AccessControl/AceEnumerator.cs
 System.Security.AccessControl/AceFlags.cs
 System.Security.AccessControl/AceQualifier.cs
 System.Security.AccessControl/AceType.cs
 System.Security.AccessControl/AuditFlags.cs
 System.Security.AccessControl/AuditRule.cs
+System.Security.AccessControl/AuditRule_T.cs
 System.Security.AccessControl/AuthorizationRule.cs
 System.Security.AccessControl/AuthorizationRuleCollection.cs
 System.Security.AccessControl/CommonAce.cs
@@ -1262,6 +1273,7 @@ System.Security.Cryptography/CipherMode.cs
 System.Security.Cryptography/CryptoAPITransform.cs
 System.Security.Cryptography/CryptoConfig.cs
 System.Security.Cryptography/CryptoConfig_2_1.cs
+System.Security.Cryptography/CryptoConfig.fullaot.cs
 System.Security.Cryptography/CryptographicException.cs
 System.Security.Cryptography/CryptographicUnexpectedOperationExcpetion.cs
 System.Security.Cryptography/CryptoStream.cs
@@ -1407,6 +1419,7 @@ System.Security.Policy/CodeConnectAccess.cs
 System.Security.Policy/CodeGroup.cs
 System.Security.Policy/DefaultPolicies.cs
 System.Security.Policy/Evidence.cs
+System.Security.Policy/EvidenceBase.cs
 System.Security.Policy/FileCodeGroup.cs
 System.Security.Policy/FirstMatchCodeGroup.cs
 System.Security.Policy/Gac.cs
@@ -1424,7 +1437,6 @@ System.Security.Policy/NetCodeGroup.cs
 System.Security.Policy/PermissionRequestEvidence.cs
 System.Security.Policy/PolicyException.cs
 System.Security.Policy/PolicyLevel.cs
-System.Security.Policy/PolicyLevel_2_1.cs
 System.Security.Policy/PolicyStatement.cs
 System.Security.Policy/PolicyStatementAttribute.cs
 System.Security.Policy/Publisher.cs
@@ -1508,6 +1520,7 @@ System.Threading/LockRecursionException.cs
 System.Threading/ManualResetEvent.cs
 System.Threading/Monitor.cs
 System.Threading/Mutex.cs
+System.Threading/NamedDataSlot.cs
 System.Threading/NativeEventCalls.cs
 System.Threading/NativeOverlapped.cs
 System.Threading/Overlapped.cs
@@ -1544,6 +1557,7 @@ System.Collections.Generic/IList.cs
 System.Collections.Generic/IComparer.cs
 System.Collections.Generic/IEqualityComparer.cs
 System.Collections.Generic/IDictionary.cs
+System.Collections.Generic/IReadOnlyCollection.cs
 System.Collections.Generic/IReadOnlyList.cs
 System.Collections.Generic/IReadOnlyDictionary.cs
 System.Collections.Generic/KeyValuePair.cs
@@ -1553,13 +1567,17 @@ System.Collections.Generic/List.cs
 System.Collections.ObjectModel/Collection.cs
 System.Collections.ObjectModel/KeyedCollection.cs
 System.Collections.ObjectModel/ReadOnlyCollection.cs
+System.Collections.ObjectModel/ReadOnlyDictionary.cs
 System/Action.cs
 System/ArraySegment.cs
 System/Comparison.cs
 System/Converter.cs
 System/Predicate.cs
+System/Progress.cs
 System.Collections.Generic/Comparer.cs
 
+System.Threading.Tasks/ConcurrentExclusiveSchedulerPair.cs
+System.Threading.Tasks/DecoupledTask.cs
 System.Threading.Tasks/TaskFactory.cs
 System.Threading.Tasks/TaskFactory_T.cs
 System.Threading.Tasks/TaskStatus.cs
@@ -1585,6 +1603,7 @@ System.Collections.Concurrent/OrderablePartitioner.cs
 System.Collections.Concurrent/ConcurrentDictionary.cs
 System.Collections.Concurrent/Partitioner.cs
 System.Collections.Concurrent/ConcurrentQueue.cs
+System.Collections.Concurrent/EnumerablePartitionerOptions.cs
 System.Collections.Concurrent.Partitioners/ListPartitioner.cs
 System.Collections.Concurrent.Partitioners/EnumerablePartitioner.cs
 System.Collections.Concurrent.Partitioners/UserRangePartitioner.cs
@@ -1612,5 +1631,5 @@ System/AggregateException.cs
 System.Threading.Tasks/SimpleConcurrentBag.cs
 System.Threading.Tasks/SynchronizationContextScheduler.cs
 System.Threading.Tasks/UnobservedTaskExceptionEventArgs.cs
-System.Collections.Concurrent/ObjectPool.cs
 System.Threading.Tasks/TpScheduler.cs
+System.Threading.Tasks/TaskExtensionsImpl.cs

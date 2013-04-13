@@ -58,7 +58,7 @@ gpointer mono_create_thread (WapiSecurityAttributes *security,
 							 guint32 stacksize, WapiThreadStart start,
 							 gpointer param, guint32 create, gsize *tid) MONO_INTERNAL;
 
-MonoInternalThread* mono_thread_create_internal (MonoDomain *domain, gpointer func, gpointer arg, gboolean threadpool_thread, guint32 stack_size) MONO_INTERNAL;
+MonoInternalThread* mono_thread_create_internal (MonoDomain *domain, gpointer func, gpointer arg, gboolean threadpool_thread, gboolean no_detach, guint32 stack_size) MONO_INTERNAL;
 
 void mono_threads_install_cleanup (MonoThreadCleanupFunc func) MONO_INTERNAL;
 
@@ -152,6 +152,9 @@ void ves_icall_System_Threading_Thread_VolatileWriteObject (void *ptr, void *) M
 void ves_icall_System_Threading_Thread_VolatileWriteFloat (void *ptr, float) MONO_INTERNAL;
 void ves_icall_System_Threading_Thread_VolatileWriteDouble (void *ptr, double) MONO_INTERNAL;
 
+MonoObject* ves_icall_System_Threading_Volatile_Read_T (void *ptr) MONO_INTERNAL;
+void ves_icall_System_Threading_Volatile_Write_T (void *ptr, MonoObject *value) MONO_INTERNAL;
+
 void ves_icall_System_Threading_Thread_MemoryBarrier (void) MONO_INTERNAL;
 void ves_icall_System_Threading_Thread_Interrupt_internal (MonoInternalThread *this_obj) MONO_INTERNAL;
 void ves_icall_System_Threading_Thread_SpinWait_nop (void) MONO_INTERNAL;
@@ -217,7 +220,7 @@ void mono_thread_interruption_checkpoint (void) MONO_INTERNAL;
 void mono_thread_force_interruption_checkpoint (void) MONO_INTERNAL;
 gint32* mono_thread_interruption_request_flag (void) MONO_INTERNAL;
 
-uint32_t mono_alloc_special_static_data (uint32_t static_type, uint32_t size, uint32_t align, uintptr_t *bitmap, int max_set) MONO_INTERNAL;
+uint32_t mono_alloc_special_static_data (uint32_t static_type, uint32_t size, uint32_t align, uintptr_t *bitmap, int numbits) MONO_INTERNAL;
 void*    mono_get_special_static_data   (uint32_t offset) MONO_INTERNAL;
 gpointer mono_get_special_static_data_for_thread (MonoInternalThread *thread, guint32 offset) MONO_INTERNAL;
 

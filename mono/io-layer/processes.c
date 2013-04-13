@@ -33,7 +33,12 @@
 
 /* sys/resource.h (for rusage) is required when using osx 10.3 (but not 10.4) */
 #ifdef __APPLE__
+#include <TargetConditionals.h>
 #include <sys/resource.h>
+#ifdef HAVE_LIBPROC_H
+/* proc_name */
+#include <libproc.h>
+#endif
 #endif
 
 #if defined(PLATFORM_MACOSX) || defined(__OpenBSD__)
@@ -373,7 +378,8 @@ gboolean ShellExecuteEx (WapiShellExecuteInfo *sei)
 				     sei->lpDirectory, NULL, &process_info);
 		g_free (args);
 		if (!ret){
-			SetLastError (ERROR_INVALID_DATA);
+			if (GetLastError () != ERROR_OUTOFMEMORY)
+				SetLastError (ERROR_INVALID_DATA);
 			return FALSE;
 		}
 	}
@@ -559,6 +565,7 @@ gboolean CreateProcess (const gunichar2 *appname, const gunichar2 *cmdline,
 	int startup_pipe [2] = {-1, -1};
 	int dummy;
 	struct MonoProcess *mono_process;
+	gboolean fork_failed = FALSE;
 	
 	mono_once (&process_ops_once, process_ops_init);
 	mono_once (&process_sig_chld_once, process_add_sigchld_handler);
@@ -960,14 +967,15 @@ gboolean CreateProcess (const gunichar2 *appname, const gunichar2 *cmdline,
 	if (pid == -1) {
 		/* Error */
 		SetLastError (ERROR_OUTOFMEMORY);
-		_wapi_handle_unref (handle);
+		ret = FALSE;
+		fork_failed = TRUE;
 		goto cleanup;
 	} else if (pid == 0) {
 		/* Child */
 		
 		if (startup_pipe [0] != -1) {
 			/* Wait until the parent has updated it's internal data */
-			read (startup_pipe [0], &dummy, 1);
+			ssize_t _i G_GNUC_UNUSED = read (startup_pipe [0], &dummy, 1);
 			DEBUG ("%s: child: parent has completed its setup", __func__);
 			close (startup_pipe [0]);
 			close (startup_pipe [1]);
@@ -1065,9 +1073,12 @@ gboolean CreateProcess (const gunichar2 *appname, const gunichar2 *cmdline,
 cleanup:
 	_wapi_handle_unlock_shared_handles ();
 
+	if (fork_failed)
+		_wapi_handle_unref (handle);
+
 	if (startup_pipe [1] != -1) {
 		/* Write 1 byte, doesn't matter what */
-		write (startup_pipe [1], startup_pipe, 1);
+		ssize_t _i G_GNUC_UNUSED = write (startup_pipe [1], startup_pipe, 1);
 		close (startup_pipe [0]);
 		close (startup_pipe [1]);
 	}
@@ -1949,6 +1960,7 @@ static GSList *load_modules (FILE *fp)
 static gboolean match_procname_to_modulename (gchar *procname, gchar *modulename)
 {
 	char* lastsep = NULL;
+	char* lastsep2 = NULL;
 	char* pname = NULL;
 	char* mname = NULL;
 	gboolean result = FALSE;
@@ -1967,6 +1979,18 @@ static gboolean match_procname_to_modulename (gchar *procname, gchar *modulename
 		if (lastsep)
 			if (!strcmp (lastsep+1, pname))
 				result = TRUE;
+		if (!result) {
+			lastsep2 = strrchr (pname, '/');
+			if (lastsep2){
+				if (lastsep) {
+					if (!strcmp (lastsep+1, lastsep2+1))
+						result = TRUE;
+				} else {
+					if (!strcmp (mname, lastsep2+1))
+						result = TRUE;
+				}
+			}
+		}
 	}
 
 	g_free (pname);
@@ -2119,7 +2143,7 @@ static gchar *get_process_name_from_proc (pid_t pid)
 	}
 	g_free (filename);
 #elif defined(PLATFORM_MACOSX)
-#if (MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_5) && !defined (__mono_ppc__) && !defined(__arm__)
+#if !defined (__mono_ppc__) && defined (TARGET_OSX)
 	/* No proc name on OSX < 10.5 nor ppc nor iOS */
 	memset (buf, '\0', sizeof(buf));
 	proc_name (pid, buf, sizeof(buf));

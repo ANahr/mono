@@ -140,6 +140,12 @@ namespace Mono.Debugger.Soft
 			notify_vm_event (EventType.VMDisconnect, SuspendPolicy.None, 0, 0, null);
 		}
 
+		[Obsolete ("This method was poorly named; use the Detach() method instead")]
+		public void Dispose ()
+		{
+			Detach ();
+		}
+
 		public void ForceDisconnect ()
 		{
 			conn.ForceDisconnect ();
@@ -675,9 +681,9 @@ namespace Mono.Debugger.Soft
         }
     }
 
-	internal class CommandException : Exception {
+	public class CommandException : Exception {
 
-		public CommandException (ErrorCode error_code) : base ("Debuggee returned error code " + error_code + ".") {
+		internal CommandException (ErrorCode error_code) : base ("Debuggee returned error code " + error_code + ".") {
 			ErrorCode = error_code;
 		}
 

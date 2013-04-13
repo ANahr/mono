@@ -569,6 +569,9 @@ namespace Mono.CSharp {
 		protected virtual void EmitHoistedParameters (EmitContext ec, List<HoistedParameter> hoisted)
 		{
 			foreach (HoistedParameter hp in hoisted) {
+				if (hp == null)
+					continue;
+
 				//
 				// Parameters could be proxied via local fields for value type storey
 				//
@@ -815,7 +818,7 @@ namespace Mono.CSharp {
 		sealed class HoistedFieldAssign : CompilerAssign
 		{
 			public HoistedFieldAssign (Expression target, Expression source)
-				: base (target, source, source.Location)
+				: base (target, source, target.Location)
 			{
 			}
 
@@ -850,6 +853,8 @@ namespace Mono.CSharp {
 				return field;
 			}
 		}
+
+		public bool IsAssigned { get; set; }
 
 		public ParameterReference Parameter {
 			get {
@@ -996,12 +1001,12 @@ namespace Mono.CSharp {
 					return delegate_type;
 
 				ec.Report.Error (835, loc, "Cannot convert `{0}' to an expression tree of non-delegate type `{1}'",
-					GetSignatureForError (), TypeManager.CSharpName (delegate_type));
+					GetSignatureForError (), delegate_type.GetSignatureForError ());
 				return null;
 			}
 
 			ec.Report.Error (1660, loc, "Cannot convert `{0}' to non-delegate type `{1}'",
-				      GetSignatureForError (), TypeManager.CSharpName (delegate_type));
+				      GetSignatureForError (), delegate_type.GetSignatureForError ());
 			return null;
 		}
 
@@ -1013,7 +1018,7 @@ namespace Mono.CSharp {
 			if (!ec.IsInProbingMode)
 				ec.Report.Error (1661, loc,
 					"Cannot convert `{0}' to delegate type `{1}' since there is a parameter mismatch",
-					GetSignatureForError (), TypeManager.CSharpName (delegate_type));
+					GetSignatureForError (), delegate_type.GetSignatureForError ());
 
 			return false;
 		}
@@ -1025,7 +1030,7 @@ namespace Mono.CSharp {
 					return false;
 				
 				ec.Report.Error (1593, loc, "Delegate `{0}' does not take `{1}' arguments",
-					      TypeManager.CSharpName (delegate_type), Parameters.Count.ToString ());
+					      delegate_type.GetSignatureForError (), Parameters.Count.ToString ());
 				return false;
 			}
 
@@ -1065,8 +1070,8 @@ namespace Mono.CSharp {
 					
 					ec.Report.Error (1678, loc, "Parameter `{0}' is declared as type `{1}' but should be `{2}'",
 						      (i+1).ToString (),
-						      TypeManager.CSharpName (Parameters.Types [i]),
-						      TypeManager.CSharpName (invoke_pd.Types [i]));
+						      Parameters.Types [i].GetSignatureForError (),
+						      invoke_pd.Types [i].GetSignatureForError ());
 					error = true;
 				}
 			}
@@ -1095,9 +1100,19 @@ namespace Mono.CSharp {
 			if (d_params.Count != Parameters.Count)
 				return false;
 
+			var ptypes = Parameters.Types;
+			var dtypes = d_params.Types;
 			for (int i = 0; i < Parameters.Count; ++i) {
-				if (type_inference.ExactInference (Parameters.Types[i], d_params.Types[i]) == 0)
+				if (type_inference.ExactInference (ptypes[i], dtypes[i]) == 0) {
+					//
+					// Continue when 0 (quick path) does not mean inference failure. Checking for
+					// same type handles cases like int -> int
+					//
+					if (ptypes[i] == dtypes[i])
+						continue;
+
 					return false;
+				}
 			}
 
 			return true;
@@ -1214,6 +1229,17 @@ namespace Mono.CSharp {
 					}
 				} else {
 					am = body.Compatible (ec);
+
+					if (body.DirectMethodGroupConversion != null) {
+						var errors_printer = new SessionReportPrinter ();
+						var old = ec.Report.SetPrinter (errors_printer);
+						var expr = new ImplicitDelegateCreation (delegate_type, body.DirectMethodGroupConversion, loc) {
+							AllowSpecialMethodsInvocation = true
+						}.Resolve (ec);
+						ec.Report.SetPrinter (old);
+						if (expr != null && errors_printer.ErrorsCount == 0)
+							am = expr;
+					}
 				}
 			} catch (CompletionResult) {
 				throw;
@@ -1349,10 +1375,10 @@ namespace Mono.CSharp {
 					return null;
 				}
 
-				b = b.ConvertToAsyncTask (ec, ec.CurrentMemberDefinition.Parent.PartialContainer, p, return_type, loc);
+				b = b.ConvertToAsyncTask (ec, ec.CurrentMemberDefinition.Parent.PartialContainer, p, return_type, delegate_type, loc);
 			}
 
-			return CompatibleMethodFactory (return_type ?? InternalType.Arglist, delegate_type, p, b);
+			return CompatibleMethodFactory (return_type ?? InternalType.ErrorType, delegate_type, p, b);
 		}
 
 		protected virtual AnonymousMethodBody CompatibleMethodFactory (TypeSpec return_type, TypeSpec delegate_type, ParametersCompiled p, ParametersBlock b)
@@ -1437,7 +1463,7 @@ namespace Mono.CSharp {
 			}
 		}
 
-		protected ParametersBlock block;
+		protected readonly ParametersBlock block;
 
 		public TypeSpec ReturnType;
 
@@ -1475,24 +1501,15 @@ namespace Mono.CSharp {
 			BlockContext aec = new BlockContext (ec, block, ReturnType);
 			aec.CurrentAnonymousMethod = ae;
 
-			ResolveContext.Options flags = 0;
-
 			var am = this as AnonymousMethodBody;
 
 			if (ec.HasSet (ResolveContext.Options.InferReturnType) && am != null) {
 				am.ReturnTypeInference = new TypeInferenceContext ();
 			}
 
-			if (ec.IsInProbingMode)
-				flags |= ResolveContext.Options.ProbingMode;
-
-			if (ec.HasSet (ResolveContext.Options.FieldInitializerScope))
-				flags |= ResolveContext.Options.FieldInitializerScope;
-
-			if (ec.HasSet (ResolveContext.Options.ExpressionTreeConversion))
-				flags |= ResolveContext.Options.ExpressionTreeConversion;
-
-			aec.Set (flags);
+			var bc = ec as BlockContext;
+			if (bc != null)
+				aec.FlowOffset = bc.FlowOffset;
 
 			var errors = ec.Report.Errors;
 
@@ -1561,6 +1578,14 @@ namespace Mono.CSharp {
 			get { return "anonymous method"; }
 		}
 
+		//
+		// Method-group instance for lambdas which can be replaced with
+		// simple method group call
+		//
+		public MethodGroupExpr DirectMethodGroupConversion {
+			get; set;
+		}
+
 		public override bool IsIterator {
 			get {
 				return false;
@@ -1583,7 +1608,9 @@ namespace Mono.CSharp {
 		}
 
 		public override AnonymousMethodStorey Storey {
-			get { return storey; }
+			get {
+				return storey;
+			}
 		}
 
 		#endregion
@@ -1628,21 +1655,25 @@ namespace Mono.CSharp {
 				parent = storey = FindBestMethodStorey ();
 
 				if (storey == null) {
-					var sm = src_block.ParametersBlock.TopBlock.StateMachine;
+					var top_block = src_block.ParametersBlock.TopBlock;
+					var sm = top_block.StateMachine;
 
-					//
-					// Remove hoisted this demand when simple instance method is enough
-					//
 					if (src_block.HasCapturedThis) {
-						src_block.ParametersBlock.TopBlock.RemoveThisReferenceFromChildrenBlock (src_block);
+						//
+						// Remove hoisted 'this' request when simple instance method is
+						// enough (no hoisted variables only 'this')
+						//
+						if (src_block.ParametersBlock.StateMachine == null)
+							top_block.RemoveThisReferenceFromChildrenBlock (src_block);
 
 						//
 						// Special case where parent class is used to emit instance method
-						// because currect storey is of value type (async host) and we don't
-						// want to create another childer storey to host this reference only
+						// because currect storey is of value type (async host). We cannot
+						// use ldftn on non-boxed instances either to share mutated state
 						//
-						if (sm != null && sm.Kind == MemberKind.Struct)
+						if (sm != null && sm.Kind == MemberKind.Struct) {
 							parent = sm.Parent.PartialContainer;
+						}
 					}
 
 					//
@@ -1707,6 +1738,7 @@ namespace Mono.CSharp {
 				//
 				method = DoCreateMethodHost (ec);
 				method.Define ();
+				method.PrepareEmit ();
 			}
 
 			bool is_static = (method.ModFlags & Modifiers.STATIC) != 0;
@@ -1833,7 +1865,7 @@ namespace Mono.CSharp {
 
 		public override string GetSignatureForError ()
 		{
-			return TypeManager.CSharpName (type);
+			return type.GetSignatureForError ();
 		}
 	}
 
@@ -2004,11 +2036,11 @@ namespace Mono.CSharp {
 
 				IntConstant FNV_prime = new IntConstant (Compiler.BuiltinTypes, 16777619, loc);				
 				rs_hashcode = new Binary (Binary.Operator.Multiply,
-					new Binary (Binary.Operator.ExclusiveOr, rs_hashcode, field_hashcode, loc),
-					FNV_prime, loc);
+					new Binary (Binary.Operator.ExclusiveOr, rs_hashcode, field_hashcode),
+					FNV_prime);
 
 				Expression field_to_string = new Conditional (new BooleanExpression (new Binary (Binary.Operator.Inequality,
-					new MemberAccess (new This (f.Location), f.Name), new NullLiteral (loc), loc)),
+					new MemberAccess (new This (f.Location), f.Name), new NullLiteral (loc))),
 					new Invocation (new MemberAccess (
 						new MemberAccess (new This (f.Location), f.Name), "ToString"), null),
 					new StringConstant (Compiler.BuiltinTypes, string.Empty, loc), loc);
@@ -2019,9 +2051,7 @@ namespace Mono.CSharp {
 						string_concat,
 						new Binary (Binary.Operator.Addition,
 							new StringConstant (Compiler.BuiltinTypes, " " + p.Name + " = ", loc),
-							field_to_string,
-							loc),
-						loc);
+							field_to_string));
 					continue;
 				}
 
@@ -2031,18 +2061,15 @@ namespace Mono.CSharp {
 				string_concat = new Binary (Binary.Operator.Addition,
 					new Binary (Binary.Operator.Addition,
 						string_concat,
-						new StringConstant (Compiler.BuiltinTypes, ", " + p.Name + " = ", loc),
-						loc),
-					field_to_string,
-					loc);
+						new StringConstant (Compiler.BuiltinTypes, ", " + p.Name + " = ", loc)),
+					field_to_string);
 
-				rs_equals = new Binary (Binary.Operator.LogicalAnd, rs_equals, field_equal, loc);
+				rs_equals = new Binary (Binary.Operator.LogicalAnd, rs_equals, field_equal);
 			}
 
 			string_concat = new Binary (Binary.Operator.Addition,
 				string_concat,
-				new StringConstant (Compiler.BuiltinTypes, " }", loc),
-				loc);
+				new StringConstant (Compiler.BuiltinTypes, " }", loc));
 
 			//
 			// Equals (object obj) override
@@ -2053,13 +2080,14 @@ namespace Mono.CSharp {
 					new As (equals_block.GetParameterReference (0, loc),
 						current_type, loc), loc)));
 
-			Expression equals_test = new Binary (Binary.Operator.Inequality, other_variable, new NullLiteral (loc), loc);
+			Expression equals_test = new Binary (Binary.Operator.Inequality, other_variable, new NullLiteral (loc));
 			if (rs_equals != null)
-				equals_test = new Binary (Binary.Operator.LogicalAnd, equals_test, rs_equals, loc);
+				equals_test = new Binary (Binary.Operator.LogicalAnd, equals_test, rs_equals);
 			equals_block.AddStatement (new Return (equals_test, loc));
 
 			equals.Block = equals_block;
 			equals.Define ();
+			equals.PrepareEmit ();
 			Members.Add (equals);
 
 			//
@@ -2097,23 +2125,24 @@ namespace Mono.CSharp {
 			var hash_variable = new LocalVariableReference (li_hash, loc);
 			hashcode_block.AddStatement (new StatementExpression (
 				new CompoundAssign (Binary.Operator.Addition, hash_variable,
-					new Binary (Binary.Operator.LeftShift, hash_variable, new IntConstant (Compiler.BuiltinTypes, 13, loc), loc), loc)));
+					new Binary (Binary.Operator.LeftShift, hash_variable, new IntConstant (Compiler.BuiltinTypes, 13, loc)))));
 			hashcode_block.AddStatement (new StatementExpression (
 				new CompoundAssign (Binary.Operator.ExclusiveOr, hash_variable,
-					new Binary (Binary.Operator.RightShift, hash_variable, new IntConstant (Compiler.BuiltinTypes, 7, loc), loc), loc)));
+					new Binary (Binary.Operator.RightShift, hash_variable, new IntConstant (Compiler.BuiltinTypes, 7, loc)))));
 			hashcode_block.AddStatement (new StatementExpression (
 				new CompoundAssign (Binary.Operator.Addition, hash_variable,
-					new Binary (Binary.Operator.LeftShift, hash_variable, new IntConstant (Compiler.BuiltinTypes, 3, loc), loc), loc)));
+					new Binary (Binary.Operator.LeftShift, hash_variable, new IntConstant (Compiler.BuiltinTypes, 3, loc)))));
 			hashcode_block.AddStatement (new StatementExpression (
 				new CompoundAssign (Binary.Operator.ExclusiveOr, hash_variable,
-					new Binary (Binary.Operator.RightShift, hash_variable, new IntConstant (Compiler.BuiltinTypes, 17, loc), loc), loc)));
+					new Binary (Binary.Operator.RightShift, hash_variable, new IntConstant (Compiler.BuiltinTypes, 17, loc)))));
 			hashcode_block.AddStatement (new StatementExpression (
 				new CompoundAssign (Binary.Operator.Addition, hash_variable,
-					new Binary (Binary.Operator.LeftShift, hash_variable, new IntConstant (Compiler.BuiltinTypes, 5, loc), loc), loc)));
+					new Binary (Binary.Operator.LeftShift, hash_variable, new IntConstant (Compiler.BuiltinTypes, 5, loc)))));
 
 			hashcode_block.AddStatement (new Return (hash_variable, loc));
 			hashcode.Block = hashcode_top;
 			hashcode.Define ();
+			hashcode.PrepareEmit ();
 			Members.Add (hashcode);
 
 			//
@@ -2124,6 +2153,7 @@ namespace Mono.CSharp {
 			tostring_block.AddStatement (new Return (string_concat, loc));
 			tostring.Block = tostring_block;
 			tostring.Define ();
+			tostring.PrepareEmit ();
 			Members.Add (tostring);
 
 			return true;

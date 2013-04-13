@@ -12,6 +12,7 @@
 #include <mono/metadata/mono-cq.h>
 #include <mono/metadata/mono-mlist.h>
 #include <mono/utils/mono-memory-model.h>
+#include <mono/utils/atomic.h>
 
 #define CQ_DEBUG(...)
 //#define CQ_DEBUG(...) g_message(__VA_ARGS__)
@@ -66,8 +67,8 @@ mono_cq_create ()
 	MonoCQ *cq;
 
 	cq = g_new0 (MonoCQ, 1);
-	MONO_GC_REGISTER_ROOT (cq->head);
-	MONO_GC_REGISTER_ROOT (cq->tail);
+	MONO_GC_REGISTER_ROOT_SINGLE (cq->head);
+	MONO_GC_REGISTER_ROOT_SINGLE (cq->tail);
 	cq->head = mono_mlist_alloc ((MonoObject *) mono_cqitem_alloc ());
 	cq->tail = cq->head;
 	CQ_DEBUG ("Created %p", cq);
@@ -107,6 +108,10 @@ mono_cq_add_node (MonoCQ *cq)
 	n = mono_mlist_alloc ((MonoObject *) mono_cqitem_alloc ());
 	prev_tail = cq->tail;
 	MONO_OBJECT_SETREF (prev_tail, next, n);
+
+	/* prev_tail->next must be visible before the new tail is */
+	STORE_STORE_FENCE;
+
 	cq->tail = n;
 }
 
